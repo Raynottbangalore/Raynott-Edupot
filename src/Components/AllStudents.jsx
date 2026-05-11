@@ -291,7 +291,7 @@ const AllStudents = ({ students, onViewDetails, onDelete, onUpdateStudent, onRef
         {/* Header with Back Button */}
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-4 gap-7">
               <button
                 onClick={handleBackToClasses}
                 className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
