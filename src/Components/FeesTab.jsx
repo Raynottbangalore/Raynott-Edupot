@@ -1,5 +1,5 @@
 // src/components/dashboard/components/FeesTab.jsx
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { Search, Filter, User, Calendar, DollarSign, CreditCard, X, Eye, School, Users, ArrowLeft, TrendingUp, AlertCircle, ChevronRight } from 'lucide-react';
 import FeesInstallment from './FeesInstallment';
 
@@ -12,7 +12,7 @@ const FeesTab = ({ students, onUpdateStudent }) => {
   const [showFeesModal, setShowFeesModal] = useState(false);
   const [selectedClass, setSelectedClass] = useState(null);
   const [selectedSectionData, setSelectedSectionData] = useState(null);
-  const [viewMode, setViewMode] = useState('class'); // 'class' or 'students'
+  const [viewMode, setViewMode] = useState('class');
 
   // Get unique grades and sections for filters
   const grades = [...new Set(students.map(s => s.basicInfo?.grade).filter(Boolean))].sort();
@@ -114,15 +114,19 @@ const FeesTab = ({ students, onUpdateStudent }) => {
     return total;
   }, [students]);
 
-  const handleViewFees = (student) => {
+  // Handle opening fee details modal for a specific student
+  const handleViewFees = useCallback((student) => {
+    console.log('Opening fee details for:', student.basicInfo?.name);
     setSelectedStudent(student);
     setShowFeesModal(true);
-  };
+  }, []);
 
-  const handleCloseModal = () => {
+  const handleCloseModal = useCallback(() => {
     setShowFeesModal(false);
-    setSelectedStudent(null);
-  };
+    setTimeout(() => {
+      setSelectedStudent(null);
+    }, 200);
+  }, []);
 
   const handleClearFilters = () => {
     setSearchTerm('');
@@ -131,7 +135,7 @@ const FeesTab = ({ students, onUpdateStudent }) => {
     setSelectedStatus('');
   };
 
-  // Handle class/section click
+  // Handle class/section click - this takes you to the fee details view
   const handleClassClick = (grade, section, studentsList) => {
     setSelectedClass({ grade, section });
     setSelectedSectionData({
@@ -176,7 +180,7 @@ const FeesTab = ({ students, onUpdateStudent }) => {
     return 'Pending';
   };
 
-  // Render Class/Section View
+  // Render Class/Section View (overview)
   const renderClassView = () => {
     const groups = getGroupedClasses();
     
@@ -294,7 +298,7 @@ const FeesTab = ({ students, onUpdateStudent }) => {
     );
   };
 
-  // Render Students View for selected class
+  // Render Students View for selected class (individual student fee details)
   const renderStudentsView = () => {
     if (!selectedSectionData) return null;
     
@@ -437,7 +441,7 @@ const FeesTab = ({ students, onUpdateStudent }) => {
           </h3>
         </div>
 
-        {/* Student Cards */}
+        {/* Student Cards - THIS IS WHERE THE EYE BUTTON IS */}
         <div className="space-y-4">
           {filteredClassStudents.length === 0 ? (
             <div className="text-center py-12 bg-white rounded-xl border border-gray-200">
@@ -497,9 +501,14 @@ const FeesTab = ({ students, onUpdateStudent }) => {
                       </div>
                     </div>
 
+                    {/* FIXED: Eye button - opens the FeesInstallment modal */}
                     <button
-                      onClick={() => handleViewFees(student)}
+                      onClick={() => {
+                        console.log('👁️ Opening fee installment modal for:', student.basicInfo?.name);
+                        handleViewFees(student);
+                      }}
                       className="p-4 text-gray-500 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
+                      type="button"
                     >
                       <Eye size={21} />
                     </button>
@@ -533,9 +542,58 @@ const FeesTab = ({ students, onUpdateStudent }) => {
 
   // Main render - show class view or students view based on selection
   if (viewMode === 'students' && selectedSectionData) {
-    return renderStudentsView();
+    return (
+      <>
+        {renderStudentsView()}
+        
+        {/* Modal - only appears when in student view and eye button is clicked */}
+        {showFeesModal && selectedStudent && (
+          <div 
+            className="fixed inset-0 bg-black/60 flex items-center justify-center z-[9999] p-4 overflow-y-auto"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                handleCloseModal();
+              }
+            }}
+          >
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[92vh] overflow-y-auto relative">
+              <div className="sticky top-0 bg-white z-10 border-b px-6 py-4 flex justify-between items-center">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900">
+                    Fee Details: {selectedStudent.basicInfo?.name}
+                  </h2>
+                  <p className="text-gray-600">
+                    Adm No: {selectedStudent.basicInfo?.admissionNo} • Grade {selectedStudent.basicInfo?.grade} - {selectedStudent.basicInfo?.section}
+                  </p>
+                </div>
+                <button
+                  onClick={handleCloseModal}
+                  className="text-gray-400 hover:text-gray-700 p-2 rounded-full hover:bg-gray-100 transition-colors"
+                >
+                  <X size={28} />
+                </button>
+              </div>
+              
+              <div className="p-6">
+                <FeesInstallment 
+                  key={selectedStudent.id || selectedStudent.studentId}
+                  student={selectedStudent} 
+                  onUpdateStudent={(updatedStudent) => {
+                    if (onUpdateStudent) {
+                      onUpdateStudent(updatedStudent);
+                    }
+                    setSelectedStudent(updatedStudent);
+                  }} 
+                />
+              </div>
+            </div>
+          </div>
+        )}
+      </>
+    );
   }
 
+  // Class View
   return (
     <div className="space-y-6">
       {/* Summary Cards */}
@@ -638,40 +696,6 @@ const FeesTab = ({ students, onUpdateStudent }) => {
           renderClassView()
         )}
       </div>
-
-      {/* Fees Installment Modal */}
-      {showFeesModal && selectedStudent && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[92vh] overflow-y-auto relative">
-            <div className="sticky top-0 bg-white z-10 border-b px-6 py-4 flex justify-between items-center">
-              <div>
-                <h2 className="text-2xl font-bold text-gray-900">
-                  Fee Details: {selectedStudent.basicInfo?.name}
-                </h2>
-                <p className="text-gray-600">
-                  Adm No: {selectedStudent.basicInfo?.admissionNo} • Grade {selectedStudent.basicInfo?.grade} - {selectedStudent.basicInfo?.section}
-                </p>
-              </div>
-              <button
-                onClick={handleCloseModal}
-                className="text-gray-400 hover:text-gray-700 p-2 rounded-full hover:bg-gray-100 transition-colors"
-              >
-                <X size={28} />
-              </button>
-            </div>
-            
-            <div className="p-6">
-              <FeesInstallment 
-                student={selectedStudent} 
-                onUpdateStudent={(updatedStudent) => {
-                  onUpdateStudent(updatedStudent);
-                  setSelectedStudent(updatedStudent);
-                }} 
-              />
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
