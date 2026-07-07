@@ -1098,6 +1098,176 @@ static async getStudentsBySchool(schoolId) {
       </html>
     `;
   }
+  // Add these methods to src/service/StudentApi.js
+
+// ────────────────────────────────────────────────
+// School Information Management
+// ────────────────────────────────────────────────
+
+/**
+ * Get school information
+ * @returns {Promise<{success: boolean, data?: Object, error?: string}>}
+ */
+static async getSchoolInfo() {
+  try {
+    const headers = await this.getAuthHeader();
+    const response = await fetch(`${BASE_URL}/school-info`, {
+      method: 'GET',
+      headers,
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok || !data.success) {
+      throw new Error(data.error || 'Failed to fetch school info');
+    }
+    
+    return { success: true, data: data.data };
+  } catch (error) {
+    console.error('Get school info error:', error);
+    return { success: false, error: error.message || 'Could not fetch school info' };
+  }
+}
+
+/**
+ * Save school information
+ * @param {Object} schoolData - { schoolName, schoolAddress, schoolAffiliation }
+ * @returns {Promise<{success: boolean, data?: Object, error?: string}>}
+ */
+static async saveSchoolInfo(schoolData) {
+  try {
+    const headers = await this.getAuthHeader();
+    const response = await fetch(`${BASE_URL}/school-info`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(schoolData),
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok || !data.success) {
+      throw new Error(data.error || 'Failed to save school info');
+    }
+    
+    return { success: true, data: data.data };
+  } catch (error) {
+    console.error('Save school info error:', error);
+    return { success: false, error: error.message || 'Could not save school info' };
+  }
+}
+
+// ────────────────────────────────────────────────
+// Hall Ticket Settings Management
+// ────────────────────────────────────────────────
+
+/**
+ * Get hall ticket settings for a specific class/section
+ * @param {string} key - The storage key (e.g., "hallTicketCommon_10-A")
+ * @returns {Promise<{success: boolean, data?: Object, error?: string}>}
+ */
+static async getHallTicketSettings(key) {
+  try {
+    const headers = await this.getAuthHeader();
+    const response = await fetch(`${BASE_URL}/hallticket-settings/${encodeURIComponent(key)}`, {
+      method: 'GET',
+      headers,
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok || !data.success) {
+      return { 
+        success: false, 
+        error: data.error || 'Settings not found',
+        data: null
+      };
+    }
+    
+    return { success: true, data: data.data };
+  } catch (error) {
+    console.error('Get hall ticket settings error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Save hall ticket settings for a specific class/section
+ * @param {string} key - The storage key
+ * @param {Object} settingsData - The settings data to save
+ * @returns {Promise<{success: boolean, data?: Object, error?: string}>}
+ */
+static async saveHallTicketSettings(key, settingsData) {
+  try {
+    const headers = await this.getAuthHeader();
+    const response = await fetch(`${BASE_URL}/hallticket-settings/${encodeURIComponent(key)}`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(settingsData),
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok || !data.success) {
+      throw new Error(data.error || 'Failed to save settings');
+    }
+    
+    return { success: true, data: data.data };
+  } catch (error) {
+    console.error('Save hall ticket settings error:', error);
+    return { success: false, error: error.message || 'Could not save settings' };
+  }
+}
+
+/**
+ * Get all hall ticket settings for the school
+ * @returns {Promise<{success: boolean, data?: Object, error?: string}>}
+ */
+static async getAllHallTicketSettings() {
+  try {
+    const headers = await this.getAuthHeader();
+    const response = await fetch(`${BASE_URL}/hallticket-settings`, {
+      method: 'GET',
+      headers,
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok || !data.success) {
+      throw new Error(data.error || 'Failed to fetch settings');
+    }
+    
+    return { success: true, data: data.data };
+  } catch (error) {
+    console.error('Get all hall ticket settings error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Delete hall ticket settings for a class/section
+ * @param {string} key - The storage key
+ * @returns {Promise<{success: boolean, error?: string}>}
+ */
+static async deleteHallTicketSettings(key) {
+  try {
+    const headers = await this.getAuthHeader();
+    const response = await fetch(`${BASE_URL}/hallticket-settings/${encodeURIComponent(key)}`, {
+      method: 'DELETE',
+      headers,
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok || !data.success) {
+      throw new Error(data.error || 'Failed to delete settings');
+    }
+    
+    return { success: true };
+  } catch (error) {
+    console.error('Delete hall ticket settings error:', error);
+    return { success: false, error: error.message };
+  }
+}
 }
 
 export default StudentApi;
