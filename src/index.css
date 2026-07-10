@@ -214,3 +214,26 @@ a:hover::after {
     width: 100%;
   }
 }
+
+/* Add this to your global CSS or component */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .marks-card-modal, .marks-card-modal * {
+    visibility: visible;
+  }
+  .marks-card-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: white !important;
+    max-height: 100vh !important;
+    overflow-y: visible !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+}

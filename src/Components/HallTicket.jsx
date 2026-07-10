@@ -579,14 +579,14 @@ const HallTicket = ({ students: propStudents, onUpdateStudent }) => {
   const addSubject = () => {
     setHallTicketData({
       ...hallTicketData,
-      subjects: [...(hallTicketData.subjects || []), { name: '', code: '', date: '', time: '', venue: '' }]
+      subjects: [...(hallTicketData.subjects || []), { name: '', code: '', date: '', time: '', invigilatorSignature: '' }]
     });
   };
 
   const addCommonSubject = () => {
     setCommonHallTicketData({
       ...commonHallTicketData,
-      subjects: [...(commonHallTicketData.subjects || []), { name: '', code: '', date: '', time: '', venue: '' }]
+      subjects: [...(commonHallTicketData.subjects || []), { name: '', code: '', date: '', time: '', invigilatorSignature: '' }]
     });
   };
 
@@ -1096,11 +1096,11 @@ const HallTicket = ({ students: propStudents, onUpdateStudent }) => {
               <table class="subjects-table">
                 <thead>
                   <tr>
-                    <th style="width:12%">Code</th>
-                    <th style="width:38%">Subject Name</th>
-                    <th style="width:18%">Date</th>
+                    <th style="width:10%">Code</th>
+                    <th style="width:35%">Subject Name</th>
+                    <th style="width:15%">Date</th>
                     <th style="width:15%">Time</th>
-                    <th style="width:17%">Venue</th>
+                    <th style="width:25%">Invigilator Signature</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1110,7 +1110,7 @@ const HallTicket = ({ students: propStudents, onUpdateStudent }) => {
                       <td style="text-align:left;padding-left:12px;">${escapeHtml(subject.name)}</td>
                       <td>${escapeHtml(subject.date || '-')}</td>
                       <td>${escapeHtml(subject.time || '-')}</td>
-                      <td>${escapeHtml(subject.venue || '-')}</td>
+                      <td style="text-align:center;">${escapeHtml(subject.invigilatorSignature || '')}</td>
                     </tr>
                   `).join('')}
                 </tbody>
@@ -1473,36 +1473,6 @@ const HallTicket = ({ students: propStudents, onUpdateStudent }) => {
               </button>
             </div>
           </div>
-
-          {/* <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6 pt-6 border-t border-gray-200">
-            <div className="flex items-center space-x-3">
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <Users size={20} className="text-blue-600" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">Total Students</p>
-                <p className="text-xl font-bold text-gray-800">{studentCount}</p>
-              </div>
-            </div>
-            <div className="flex items-center space-x-3">
-              <div className="p-2 bg-green-100 rounded-lg">
-                <FileText size={20} className="text-green-600" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">Hall Tickets</p>
-                <p className="text-xl font-bold text-green-600">0 / {studentCount}</p>
-              </div>
-            </div>
-            <div className="flex items-center space-x-3">
-              <div className="p-2 bg-amber-100 rounded-lg">
-                <Printer size={20} className="text-amber-600" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">Ready to Print</p>
-                <p className="text-xl font-bold text-amber-600">0</p>
-              </div>
-            </div>
-          </div> */}
         </div>
 
         <div className="bg-white rounded-xl border border-gray-200 p-5">
@@ -1568,7 +1538,6 @@ const HallTicket = ({ students: propStudents, onUpdateStudent }) => {
                           </h3>
                           <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-gray-600 mt-2">
                             <span>Class: {basicInfo.grade || '—'}</span>
-                            {/* <span>Roll: {basicInfo.rollNumber || '—'}</span> */}
                           </div>
                         </div>
                       </div>
@@ -1750,18 +1719,6 @@ const HallTicket = ({ students: propStudents, onUpdateStudent }) => {
                       <label className="block text-sm font-medium text-gray-700 mb-1">Exam Type</label>
                       <input type="text" value={commonHallTicketData.examType} onChange={(e) => handleCommonFieldChange('examType', e.target.value)} placeholder="e.g., Annual Examination" className="w-full border border-gray-300 rounded-lg px-3 py-2" />
                     </div>
-                    {/* <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Exam Date</label>
-                      <input type="text" value={commonHallTicketData.examDate} onChange={(e) => handleCommonFieldChange('examDate', e.target.value)} placeholder="e.g., 15 March 2025" className="w-full border border-gray-300 rounded-lg px-3 py-2" />
-                    </div> */}
-                    {/* <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Exam Time</label>
-                      <input type="text" value={commonHallTicketData.examTime} onChange={(e) => handleCommonFieldChange('examTime', e.target.value)} placeholder="e.g., 10:00 AM - 1:00 PM" className="w-full border border-gray-300 rounded-lg px-3 py-2" />
-                    </div> */}
-                    {/* <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Exam Duration</label>
-                      <input type="text" value={commonHallTicketData.examDuration} onChange={(e) => handleCommonFieldChange('examDuration', e.target.value)} placeholder="e.g., 3 Hours" className="w-full border border-gray-300 rounded-lg px-3 py-2" />
-                    </div> */}
                   </div>
                 </div>
 
@@ -1791,7 +1748,7 @@ const HallTicket = ({ students: propStudents, onUpdateStudent }) => {
                         <input type="text" placeholder="Subject Code" value={subject.code || ''} onChange={(e) => handleCommonSubjectChange(index, 'code', e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2" />
                         <input type="text" placeholder="Date" value={subject.date || ''} onChange={(e) => handleCommonSubjectChange(index, 'date', e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2" />
                         <input type="text" placeholder="Time" value={subject.time || ''} onChange={(e) => handleCommonSubjectChange(index, 'time', e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2" />
-                        <input type="text" placeholder="Venue" value={subject.venue || ''} onChange={(e) => handleCommonSubjectChange(index, 'venue', e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2" />
+                        <input type="text" placeholder="Invigilator Signature" value={subject.invigilatorSignature || ''} onChange={(e) => handleCommonSubjectChange(index, 'invigilatorSignature', e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2" />
                       </div>
                     </div>
                   ))}
@@ -2066,7 +2023,7 @@ const HallTicket = ({ students: propStudents, onUpdateStudent }) => {
                           <input type="text" placeholder="Subject Code" value={subject.code || ''} onChange={(e) => handleSubjectChange(index, 'code', e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2" />
                           <input type="text" placeholder="Date" value={subject.date || ''} onChange={(e) => handleSubjectChange(index, 'date', e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2" />
                           <input type="text" placeholder="Time" value={subject.time || ''} onChange={(e) => handleSubjectChange(index, 'time', e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2" />
-                          <input type="text" placeholder="Venue" value={subject.venue || ''} onChange={(e) => handleSubjectChange(index, 'venue', e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2" />
+                          <input type="text" placeholder="Invigilator Signature" value={subject.invigilatorSignature || ''} onChange={(e) => handleSubjectChange(index, 'invigilatorSignature', e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2" />
                         </div>
                       </div>
                     ))}
