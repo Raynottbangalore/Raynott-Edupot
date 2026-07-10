@@ -1,6 +1,6 @@
 // src/components/dashboard/components/MarksCard.jsx
 import React, { useState, useMemo, useEffect } from 'react';
-import { Search, X, Award, BookOpen, Calendar, Download, User, GraduationCap, Loader, FileDown } from 'lucide-react';
+import { Search, X, Award, BookOpen, Calendar, Download, User, GraduationCap, Loader, FileDown, Edit, Printer, Save, RefreshCw } from 'lucide-react';
 import { toast } from 'react-toastify';
 import html2pdf from 'html2pdf.js';
 import StudentApi from '../service/StudentApi';
@@ -15,10 +15,23 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [filteredStudents, setFilteredStudents] = useState([]);
+  
+  // Update marks card states
+  const [isUpdateMode, setIsUpdateMode] = useState(false);
+  const [updateGrade, setUpdateGrade] = useState('');
+  const [updateSection, setUpdateSection] = useState('');
+  const [updateStudents, setUpdateStudents] = useState([]);
+  const [editingMarks, setEditingMarks] = useState({});
+  const [isSaving, setIsSaving] = useState(false);
+  
   const [schoolInfo, setSchoolInfo] = useState({
-    schoolName: '',
-    schoolAddress: '',
-    schoolAffiliation: '',
+    schoolName: 'Your School Name',
+    schoolAddress: '123 School Street, City, State - 123456',
+    schoolPhone: '+91 1234567890',
+    schoolEmail: 'info@school.edu',
+    schoolLogo: '',
+    principalName: 'Dr. Principal Name',
+    classTeacherName: 'Mr./Ms. Teacher Name',
   });
 
   // Load students
@@ -57,7 +70,7 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
     try {
       const result = await StudentApi.getSchoolInfo();
       if (result.success && result.data) {
-        setSchoolInfo(result.data);
+        setSchoolInfo(prev => ({ ...prev, ...result.data }));
       }
     } catch (error) {
       console.error('Error loading school info:', error);
@@ -103,6 +116,42 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
 
     setFilteredStudents(filtered);
   }, [students, searchTerm, selectedGrade, selectedSection]);
+
+  // Load students for update mode
+  useEffect(() => {
+    if (isUpdateMode && updateGrade && updateSection) {
+      const filtered = students.filter(student => 
+        student.basicInfo?.grade === updateGrade &&
+        student.basicInfo?.section === updateSection
+      );
+      setUpdateStudents(filtered);
+      
+      // Initialize editing marks
+      const marks = {};
+      filtered.forEach(student => {
+        const exams = student.marks?.exams || [];
+        if (exams.length > 0) {
+          const latestExam = exams[exams.length - 1];
+          marks[student.studentId] = {
+            examId: latestExam.id || 'latest',
+            subjects: (latestExam.subjects || []).map(s => ({
+              name: s.name,
+              marks: s.marks || 0,
+              total: s.total || 100,
+              obtained: s.marks || 0,
+              percentage: s.total > 0 ? ((s.marks / s.total) * 100) : 0,
+            }))
+          };
+        } else {
+          marks[student.studentId] = {
+            examId: 'new',
+            subjects: []
+          };
+        }
+      });
+      setEditingMarks(marks);
+    }
+  }, [isUpdateMode, updateGrade, updateSection, students]);
 
   // Get overall grade
   const getOverallGrade = (percentage) => {
@@ -180,7 +229,94 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
     };
   };
 
-  // Generate Marks Card HTML - Black and White
+  // Handle mark update
+  const handleMarkUpdate = (studentId, subjectIndex, field, value) => {
+    setEditingMarks(prev => {
+      const updated = { ...prev };
+      if (updated[studentId]) {
+        const subjects = [...updated[studentId].subjects];
+        if (subjects[subjectIndex]) {
+          subjects[subjectIndex] = { ...subjects[subjectIndex], [field]: parseFloat(value) || 0 };
+          // Recalculate percentage
+          if (field === 'marks' || field === 'total') {
+            const marks = subjects[subjectIndex].marks || 0;
+            const total = subjects[subjectIndex].total || 100;
+            subjects[subjectIndex].percentage = total > 0 ? (marks / total) * 100 : 0;
+            subjects[subjectIndex].obtained = marks;
+          }
+          updated[studentId].subjects = subjects;
+        }
+      }
+      return updated;
+    });
+  };
+
+  // Save updated marks
+  const saveMarks = async () => {
+    setIsSaving(true);
+    try {
+      // Here you would call your API to save the marks
+      // For now, we'll just update the local state and show success
+      
+      // Update each student's marks
+      const updatedStudents = updateStudents.map(student => {
+        const marksData = editingMarks[student.studentId];
+        if (marksData && marksData.subjects.length > 0) {
+          const totalMarks = marksData.subjects.reduce((sum, s) => sum + (s.marks || 0), 0);
+          const totalPossible = marksData.subjects.reduce((sum, s) => sum + (s.total || 0), 0);
+          const percentage = totalPossible > 0 ? (totalMarks / totalPossible) * 100 : 0;
+          
+          const updatedStudent = {
+            ...student,
+            marks: {
+              ...student.marks,
+              exams: [
+                ...(student.marks?.exams || []).slice(0, -1),
+                {
+                  ...(student.marks?.exams || [])[((student.marks?.exams || []).length - 1)] || {},
+                  subjects: marksData.subjects.map(s => ({
+                    name: s.name,
+                    marks: s.marks,
+                    total: s.total,
+                    percentage: s.percentage,
+                    grade: getOverallGrade(s.percentage)
+                  })),
+                  totalMarks: totalMarks,
+                  totalPossible: totalPossible,
+                  percentage: percentage,
+                  overallGrade: getOverallGrade(percentage)
+                }
+              ]
+            }
+          };
+          return updatedStudent;
+        }
+        return student;
+      });
+
+      // Update local state
+      setStudents(updatedStudents);
+      
+      // Call parent update if provided
+      if (onUpdateStudent) {
+        updatedStudents.forEach(student => onUpdateStudent(student));
+      }
+      
+      toast.success('Marks updated successfully!');
+      setIsUpdateMode(false);
+      setUpdateGrade('');
+      setUpdateSection('');
+      setUpdateStudents([]);
+      setEditingMarks({});
+    } catch (error) {
+      console.error('Error saving marks:', error);
+      toast.error('Failed to save marks');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Generate Marks Card HTML with all required fields
   const getMarksCardHTML = (student) => {
     if (!student) return '';
     
@@ -218,7 +354,7 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
           }
           
           .marks-card {
-            max-width: 900px;
+            max-width: 1000px;
             width: 100%;
             background: white;
             border: 2px solid #000000;
@@ -226,32 +362,59 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
             position: relative;
           }
 
-          .header {
-            text-align: center;
+          /* School Header */
+          .school-header {
+            display: flex;
+            align-items: center;
+            justify-content: center;
             padding-bottom: 20px;
             border-bottom: 2px solid #000000;
-            margin-bottom: 25px;
+            margin-bottom: 20px;
+            gap: 20px;
+          }
+
+          .school-logo {
+            width: 80px;
+            height: 80px;
+            border: 2px solid #000000;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 40px;
+            font-weight: bold;
+            color: #000000;
+            flex-shrink: 0;
+            background: #f9f9f9;
+          }
+
+          .school-info {
+            text-align: center;
           }
 
           .school-name {
-            font-size: 24px;
+            font-size: 26px;
             font-weight: 700;
             color: #000000;
             letter-spacing: 1px;
-            margin-bottom: 4px;
             text-transform: uppercase;
           }
 
-          .school-affiliation {
+          .school-details {
             font-size: 13px;
             color: #333333;
+            margin-top: 4px;
+          }
+
+          .school-details span {
+            margin: 0 8px;
           }
 
           .title-section {
             background: #000000;
             color: white;
             padding: 10px 20px;
-            margin: 20px 0 25px 0;
+            margin: 15px 0 25px 0;
             text-align: center;
           }
 
@@ -428,6 +591,41 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
             font-style: italic;
           }
 
+          /* Signature Section */
+          .signature-section {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 2px solid #000000;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+          }
+
+          .signature-block {
+            text-align: center;
+          }
+
+          .signature-line {
+            margin-top: 40px;
+            border-top: 1px solid #000000;
+            width: 80%;
+            margin-left: auto;
+            margin-right: auto;
+          }
+
+          .signature-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: #000000;
+            margin-top: 6px;
+          }
+
+          .signature-name {
+            font-size: 11px;
+            color: #333333;
+            margin-top: 2px;
+          }
+
           .footer {
             margin-top: 30px;
             padding-top: 20px;
@@ -457,8 +655,10 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
 
           @media (max-width: 768px) {
             .marks-card { padding: 20px; }
+            .school-header { flex-direction: column; }
             .student-info { grid-template-columns: 1fr; gap: 5px; }
             .performance-summary { grid-template-columns: 1fr 1fr; }
+            .signature-section { grid-template-columns: 1fr; }
             .exam-header { flex-direction: column; gap: 8px; align-items: flex-start; }
           }
         </style>
@@ -467,14 +667,22 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
         <div class="marks-card">
           <div class="watermark">MARKS CARD</div>
 
-          <div class="header">
-            <div class="school-name">${escapeHtml(schoolName)}</div>
-            <div class="school-affiliation">Academic Performance Report</div>
+          <!-- School Header with Logo -->
+          <div class="school-header">
+           
+            <div class="school-info">
+              <div class="school-name">${escapeHtml(schoolName)}</div>
+              <div class="school-details">
+                <span> ${escapeHtml(schoolInfo.schoolPhone || '')}</span>
+                <span> ${escapeHtml(schoolInfo.schoolEmail || '')}</span>
+              </div>
+              <div class="school-details"> ${escapeHtml(schoolInfo.schoolAddress || '')}</div>
+            </div>
           </div>
 
           <div class="title-section">
             <h1>MARKS CARD</h1>
-            <div class="sub-title">${escapeHtml(new Date().toLocaleDateString())}</div>
+            <div class="sub-title">Academic Performance Report - ${escapeHtml(new Date().toLocaleDateString())}</div>
           </div>
 
           <div class="student-info">
@@ -537,8 +745,8 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
                   <thead>
                     <tr>
                       <th style="text-align:left;">Subject</th>
-                      <th>Marks</th>
-                      <th>Total</th>
+                      <th>Marks Obtained</th>
+                      <th>Total Marks</th>
                       <th>Percentage</th>
                       <th>Grade</th>
                     </tr>
@@ -569,6 +777,25 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
             `}
           </div>
 
+          <!-- Signature Section -->
+          <div class="signature-section">
+            <div class="signature-block">
+              <div class="signature-line"></div>
+              <div class="signature-label">Class Teacher</div>
+              <div class="signature-name">${escapeHtml(schoolInfo.classTeacherName || 'Mr./Ms. Teacher Name')}</div>
+            </div>
+            <div class="signature-block">
+              <div class="signature-line"></div>
+              <div class="signature-label">Parent/Guardian</div>
+              <div class="signature-name">Parent's Signature</div>
+            </div>
+            <div class="signature-block">
+              <div class="signature-line"></div>
+              <div class="signature-label">Principal</div>
+              <div class="signature-name">${escapeHtml(schoolInfo.principalName || 'Dr. Principal Name')}</div>
+            </div>
+          </div>
+
           <div class="footer">
             Generated on: ${new Date().toLocaleDateString()} | Student ID: ${escapeHtml(student.studentId || 'N/A')}
           </div>
@@ -596,7 +823,7 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
           scale: 2, 
           useCORS: true, 
           logging: false,
-          width: 900,
+          width: 1000,
         },
         jsPDF: { 
           unit: 'mm', 
@@ -630,6 +857,15 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
     setSelectedSection('');
   };
 
+  // Reset update mode
+  const resetUpdateMode = () => {
+    setIsUpdateMode(false);
+    setUpdateGrade('');
+    setUpdateSection('');
+    setUpdateStudents([]);
+    setEditingMarks({});
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -637,6 +873,216 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
         <p className="text-gray-600">Search and download marks cards for students</p>
       </div>
 
+      {/* Sub-heads */}
+      <div className="flex flex-wrap gap-4">
+        <button
+          onClick={() => setIsUpdateMode(!isUpdateMode)}
+          className={`px-6 py-2.5 rounded-xl font-medium flex items-center gap-2 transition-colors ${
+            isUpdateMode 
+              ? 
+              'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              :
+              'bg-blue-600 text-white hover:bg-blue-700' 
+          }`}
+        >
+          <Edit size={18} />
+          Update Marks Card
+        </button>
+        <button
+          onClick={() => {
+            if (filteredStudents.length > 0) {
+              // Download all filtered students or show option
+              toast.info('Select a student to download marks card');
+            } else {
+              toast.warning('No students to download');
+            }
+          }}
+          className="px-6 py-2.5 rounded-xl font-medium bg-green-100 text-green-700 hover:bg-green-200 flex items-center gap-2 transition-colors"
+        >
+          <Download size={18} />
+          Download Marks Card
+        </button>
+      </div>
+
+      {/* Update Marks Card Section */}
+      {isUpdateMode && (
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+              <Edit size={22} />
+              Update Marks Card
+            </h3>
+            <button
+              onClick={resetUpdateMode}
+              className="text-gray-400 hover:text-gray-600"
+            >
+              <X size={24} />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Select Grade</label>
+              <select
+                value={updateGrade}
+                onChange={(e) => setUpdateGrade(e.target.value)}
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 appearance-none"
+              >
+                <option value="">Select Grade</option>
+                {grades.map(grade => (
+                  <option key={grade} value={grade}>Grade {grade}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Select Section</label>
+              <select
+                value={updateSection}
+                onChange={(e) => setUpdateSection(e.target.value)}
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 appearance-none"
+              >
+                <option value="">Select Section</option>
+                {sections.map(section => (
+                  <option key={section} value={section}>Section {section}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-end">
+              <button
+                onClick={() => {
+                  if (!updateGrade || !updateSection) {
+                    toast.warning('Please select both grade and section');
+                    return;
+                  }
+                  // Trigger the useEffect by updating state
+                  setUpdateStudents([]);
+                  setTimeout(() => {
+                    const filtered = students.filter(student => 
+                      student.basicInfo?.grade === updateGrade &&
+                      student.basicInfo?.section === updateSection
+                    );
+                    setUpdateStudents(filtered);
+                  }, 100);
+                }}
+                className="w-full px-4 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
+              >
+                <RefreshCw size={18} />
+                Load Students
+              </button>
+            </div>
+          </div>
+
+          {updateStudents.length > 0 && (
+            <div className="overflow-x-auto">
+              <div className="flex justify-between items-center mb-4">
+                <span className="text-sm text-gray-600">
+                  Showing <strong>{updateStudents.length}</strong> students in Grade {updateGrade} - Section {updateSection}
+                </span>
+                <button
+                  onClick={saveMarks}
+                  disabled={isSaving}
+                  className="px-6 py-2.5 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-colors flex items-center gap-2 disabled:opacity-50"
+                >
+                  <Save size={18} />
+                  {isSaving ? 'Saving...' : 'Save All Marks'}
+                </button>
+              </div>
+
+              <div className="border rounded-xl overflow-hidden">
+                {/* <table className="w-full">
+                  <thead className="bg-gray-50 border-b">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Student Name</th>
+                      <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Admission No</th>
+                      {updateStudents[0] && editingMarks[updateStudents[0].studentId]?.subjects.map((subject, idx) => (
+                        <th key={idx} className="px-4 py-3 text-center text-sm font-semibold text-gray-700" colSpan="2">
+                          {subject.name}
+                        </th>
+                      ))}
+                      <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Percentage</th>
+                      <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Grade</th>
+                    </tr>
+                    <tr>
+                      <th className="px-4 py-2 text-left text-xs text-gray-500"></th>
+                      <th className="px-4 py-2 text-left text-xs text-gray-500"></th>
+                      {updateStudents[0] && editingMarks[updateStudents[0].studentId]?.subjects.map((subject, idx) => (
+                        <React.Fragment key={idx}>
+                          <th className="px-4 py-2 text-center text-xs text-gray-500 font-normal">Marks</th>
+                          <th className="px-4 py-2 text-center text-xs text-gray-500 font-normal">Total</th>
+                        </React.Fragment>
+                      ))}
+                      <th className="px-4 py-2 text-center text-xs text-gray-500"></th>
+                      <th className="px-4 py-2 text-center text-xs text-gray-500"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {updateStudents.map((student, studentIdx) => {
+                      const marksData = editingMarks[student.studentId];
+                      if (!marksData) return null;
+                      
+                      const totalMarks = marksData.subjects.reduce((sum, s) => sum + (s.marks || 0), 0);
+                      const totalPossible = marksData.subjects.reduce((sum, s) => sum + (s.total || 0), 0);
+                      const percentage = totalPossible > 0 ? (totalMarks / totalPossible) * 100 : 0;
+                      
+                      return (
+                        <tr key={student.studentId || studentIdx} className="border-b hover:bg-gray-50">
+                          <td className="px-4 py-3 text-sm font-medium">{student.basicInfo?.name || 'N/A'}</td>
+                          <td className="px-4 py-3 text-sm text-gray-600">{student.basicInfo?.admissionNo || 'N/A'}</td>
+                          {marksData.subjects.map((subject, subIdx) => (
+                            <React.Fragment key={subIdx}>
+                              <td className="px-2 py-2">
+                                <input
+                                  type="number"
+                                  value={subject.marks || ''}
+                                  onChange={(e) => handleMarkUpdate(student.studentId, subIdx, 'marks', e.target.value)}
+                                  className="w-16 px-2 py-1 text-center border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                  min="0"
+                                  max={subject.total || 100}
+                                />
+                              </td>
+                              <td className="px-2 py-2">
+                                <input
+                                  type="number"
+                                  value={subject.total || ''}
+                                  onChange={(e) => handleMarkUpdate(student.studentId, subIdx, 'total', e.target.value)}
+                                  className="w-16 px-2 py-1 text-center border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                  min="1"
+                                />
+                              </td>
+                            </React.Fragment>
+                          ))}
+                          <td className="px-4 py-3 text-center text-sm font-semibold">
+                            {percentage.toFixed(1)}%
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                              percentage >= 90 ? 'bg-green-100 text-green-800' :
+                              percentage >= 75 ? 'bg-blue-100 text-blue-800' :
+                              percentage >= 60 ? 'bg-yellow-100 text-yellow-800' :
+                              percentage >= 40 ? 'bg-orange-100 text-orange-800' :
+                              'bg-red-100 text-red-800'
+                            }`}>
+                              {getOverallGrade(percentage)}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table> */}
+              </div>
+            </div>
+          )}
+
+          {updateGrade && updateSection && updateStudents.length === 0 && (
+            <div className="text-center py-8">
+              <p className="text-gray-500">No students found in Grade {updateGrade} - Section {updateSection}</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Search and Filter Section */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="relative">

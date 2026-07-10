@@ -1,5 +1,5 @@
 // src/Components/HallTicket.jsx
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Eye, Edit, Download, Search, X, Save, Printer, Calendar, BookOpen, FileText, User, Loader, Plus, Trash2, ChevronRight, Users, FileDown, School, ArrowLeft, DownloadCloud, Building } from 'lucide-react';
 import { toast } from 'react-toastify';
 import StudentApi from '../service/StudentApi';
@@ -24,6 +24,10 @@ const HallTicket = ({ students: propStudents, onUpdateStudent }) => {
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [currentGrade, setCurrentGrade] = useState('');
   const [currentSection, setCurrentSection] = useState('');
+  const [isCommonDataLoaded, setIsCommonDataLoaded] = useState(false);
+  
+  // Store current class/section key for tracking
+  const [currentContext, setCurrentContext] = useState({ grade: '', section: '' });
   
   // School info - common for all classes
   const [schoolInfo, setSchoolInfo] = useState({
@@ -36,12 +40,9 @@ const HallTicket = ({ students: propStudents, onUpdateStudent }) => {
   const [commonHallTicketData, setCommonHallTicketData] = useState({
     examTitle: '',
     examType: '',
-    examDate: '',
-    examTime: '',
-    examDuration: '',
     subjects: [],
     instructions: [],
-    studentSignature: "Student's Signature",
+    teacherSignature: "Teacher's Signature",
     principalSignature: 'Principal',
     principalName: '',
     examController: 'Exam Controller',
@@ -50,7 +51,9 @@ const HallTicket = ({ students: propStudents, onUpdateStudent }) => {
   
   const [isCommonEditModalOpen, setIsCommonEditModalOpen] = useState(false);
   const [isSchoolInfoEditModalOpen, setIsSchoolInfoEditModalOpen] = useState(false);
-  const [isCommonDataLoaded, setIsCommonDataLoaded] = useState(false);
+
+  // Ref to track if common settings are being updated
+  const isCommonUpdateRef = useRef(false);
 
   const emptyHallTicketData = {
     schoolName: '',
@@ -70,10 +73,10 @@ const HallTicket = ({ students: propStudents, onUpdateStudent }) => {
     examDuration: '',
     subjects: [],
     instructions: [],
-    studentSignature: '',
-    principalSignature: '',
+    teacherSignature: "Teacher's Signature",
+    principalSignature: 'Principal',
     principalName: '',
-    examController: '',
+    examController: 'Exam Controller',
     examControllerName: '',
   };
 
@@ -132,6 +135,14 @@ const HallTicket = ({ students: propStudents, onUpdateStudent }) => {
         toast.success('School information saved successfully!');
         setIsSchoolInfoEditModalOpen(false);
         setSchoolInfo(result.data);
+        // Update current hall ticket data if in edit mode
+        if (isEditModalOpen && selectedStudent) {
+          refreshCurrentHallTicketData();
+        }
+        if (isViewModalOpen && selectedStudent) {
+          const mergedData = mergeWithCommonData(hallTicketData);
+          setHallTicketData(mergedData);
+        }
       } else {
         throw new Error(result.error || 'Failed to save school info');
       }
@@ -201,71 +212,169 @@ const HallTicket = ({ students: propStudents, onUpdateStudent }) => {
     return `hallTicketCommon_${normalizedGrade}_${normalizedSection}`;
   }, []);
 
-  // Helper function to merge common data with student data
-  const mergeWithCommonData = useCallback((studentData) => {
+  // Enhanced merge function that properly combines common and student data
+  const mergeWithCommonData = useCallback((studentData, commonData = commonHallTicketData, schoolData = schoolInfo) => {
     const merged = {
       ...emptyHallTicketData,
-      schoolName: schoolInfo.schoolName || '',
-      schoolAddress: schoolInfo.schoolAddress || '',
-      schoolAffiliation: schoolInfo.schoolAffiliation || '',
-      ...commonHallTicketData,
+      schoolName: schoolData.schoolName || '',
+      schoolAddress: schoolData.schoolAddress || '',
+      schoolAffiliation: schoolData.schoolAffiliation || '',
       ...studentData,
     };
     
-    if (commonHallTicketData.subjects && commonHallTicketData.subjects.length > 0) {
-      merged.subjects = commonHallTicketData.subjects;
+    // Always use common data for exam title and type
+    merged.examTitle = commonData.examTitle || studentData.examTitle || '';
+    merged.examType = commonData.examType || studentData.examType || '';
+    
+    // Always use common data for subjects if available
+    if (commonData.subjects && commonData.subjects.length > 0 && commonData.subjects.some(s => s && s.name)) {
+      merged.subjects = commonData.subjects;
     } else if (studentData.subjects && studentData.subjects.length > 0) {
       merged.subjects = studentData.subjects;
     } else {
       merged.subjects = [];
     }
     
-    if (commonHallTicketData.instructions && commonHallTicketData.instructions.length > 0) {
-      merged.instructions = commonHallTicketData.instructions;
+    // Always use common data for instructions if available
+    if (commonData.instructions && commonData.instructions.length > 0 && commonData.instructions.some(i => i && i.trim())) {
+      merged.instructions = commonData.instructions;
     } else if (studentData.instructions && studentData.instructions.length > 0) {
       merged.instructions = studentData.instructions;
     } else {
       merged.instructions = [];
     }
     
+    // Use common data for signature fields, but allow student override for teacher signature
+    merged.teacherSignature = studentData.teacherSignature || commonData.teacherSignature || "Teacher's Signature";
+    merged.principalSignature = commonData.principalSignature || 'Principal';
+    merged.principalName = commonData.principalName || '';
+    merged.examController = commonData.examController || 'Exam Controller';
+    merged.examControllerName = commonData.examControllerName || '';
+    
+    // Student-specific fields (always from student data)
+    merged.studentName = studentData.studentName || '';
+    merged.fatherName = studentData.fatherName || '';
+    merged.motherName = studentData.motherName || '';
+    merged.studentClass = studentData.studentClass || '';
+    merged.section = studentData.section || '';
+    merged.rollNumber = studentData.rollNumber || '';
+    merged.gender = studentData.gender || '';
+    merged.examDate = studentData.examDate || '';
+    merged.examTime = studentData.examTime || '';
+    merged.examDuration = studentData.examDuration || '';
+    
     return merged;
   }, [commonHallTicketData, schoolInfo]);
 
   // Load common settings for a specific grade and section
-  const loadCommonSettings = useCallback(async (grade, section) => {
+  const loadCommonSettings = useCallback(async (grade, section, forceReload = false) => {
+    if (!grade || !section) return null;
+    
     try {
       const key = getStorageKey(grade, section);
       const result = await StudentApi.getHallTicketSettings(key);
       
+      let commonData;
       if (result.success && result.data) {
-        setCommonHallTicketData(result.data);
-        setIsCommonDataLoaded(true);
-        return result.data;
+        commonData = result.data;
+        setCommonHallTicketData(commonData);
       } else {
-        const emptyData = {
+        commonData = {
           examTitle: '',
           examType: '',
-          examDate: '',
-          examTime: '',
-          examDuration: '',
           subjects: [],
           instructions: [],
-          studentSignature: "Student's Signature",
+          teacherSignature: "Teacher's Signature",
           principalSignature: 'Principal',
           principalName: '',
           examController: 'Exam Controller',
           examControllerName: '',
         };
-        setCommonHallTicketData(emptyData);
-        setIsCommonDataLoaded(true);
-        return emptyData;
+        setCommonHallTicketData(commonData);
       }
+      
+      setIsCommonDataLoaded(true);
+      setCurrentContext({ grade, section });
+      
+      // If edit modal is open, refresh the hall ticket data
+      if (isEditModalOpen && selectedStudent) {
+        refreshCurrentHallTicketData(commonData);
+      }
+      
+      return commonData;
     } catch (error) {
       console.error('Error loading common data:', error);
       setIsCommonDataLoaded(true);
       return null;
     }
-  }, [getStorageKey]);
+  }, [getStorageKey, isEditModalOpen, selectedStudent]);
+
+  // Function to refresh current hall ticket data with latest common settings
+  const refreshCurrentHallTicketData = useCallback(async (commonDataOverride = null) => {
+    if (!selectedStudent) return;
+    
+    try {
+      const commonData = commonDataOverride || commonHallTicketData;
+      
+      // Get the saved hall ticket data if exists
+      const result = await StudentApi.getHallTicket(selectedStudent.studentId);
+      let studentSpecificData = {};
+      
+      if (result.success && result.hallTicket) {
+        // Merge existing student data with common data
+        const existingData = result.hallTicket.hallTicketData || {};
+        studentSpecificData = {
+          studentName: existingData.studentName || getStudentInfo(selectedStudent, 'fullName'),
+          fatherName: existingData.fatherName || getStudentInfo(selectedStudent, 'fatherName'),
+          motherName: existingData.motherName || getStudentInfo(selectedStudent, 'motherName'),
+          studentClass: existingData.studentClass || getStudentInfo(selectedStudent, 'className'),
+          section: existingData.section || getStudentInfo(selectedStudent, 'section'),
+          rollNumber: existingData.rollNumber || `ROLL${selectedStudent.studentId?.slice(-6)}`,
+          gender: existingData.gender || getStudentInfo(selectedStudent, 'gender'),
+          examTitle: existingData.examTitle || '',
+          examType: existingData.examType || '',
+          examDate: existingData.examDate || '',
+          examTime: existingData.examTime || '',
+          examDuration: existingData.examDuration || '',
+          teacherSignature: existingData.teacherSignature || '',
+          principalSignature: existingData.principalSignature || '',
+          principalName: existingData.principalName || '',
+          examController: existingData.examController || '',
+          examControllerName: existingData.examControllerName || '',
+          subjects: existingData.subjects || [],
+          instructions: existingData.instructions || [],
+        };
+        
+        // Update saved hall ticket reference
+        setSavedHallTicket(result.hallTicket);
+        if (result.hallTicket.imageUrl) {
+          setPhotoPreview(result.hallTicket.imageUrl);
+        }
+      } else {
+        // No existing hall ticket, create from student info
+        const className = getStudentInfo(selectedStudent, 'className');
+        const section = getStudentInfo(selectedStudent, 'section');
+        studentSpecificData = {
+          studentName: getStudentInfo(selectedStudent, 'fullName'),
+          fatherName: getStudentInfo(selectedStudent, 'fatherName'),
+          motherName: getStudentInfo(selectedStudent, 'motherName'),
+          studentClass: className,
+          section: section,
+          rollNumber: `ROLL${selectedStudent.studentId?.slice(-6)}`,
+          gender: getStudentInfo(selectedStudent, 'gender'),
+          subjects: [],
+          instructions: [],
+        };
+      }
+      
+      // Merge with latest common data
+      const mergedData = mergeWithCommonData(studentSpecificData, commonData);
+      setHallTicketData(mergedData);
+      
+    } catch (error) {
+      console.error('Error refreshing hall ticket data:', error);
+    }
+  }, [selectedStudent, commonHallTicketData, mergeWithCommonData]);
 
   const generateHallTicket = async (student) => {
     if (!student) return;
@@ -273,6 +382,7 @@ const HallTicket = ({ students: propStudents, onUpdateStudent }) => {
     const className = getStudentInfo(student, 'className');
     const section = getStudentInfo(student, 'section');
 
+    // Load common settings first
     const commonData = await loadCommonSettings(className, section);
     
     const studentSpecificData = {
@@ -285,7 +395,7 @@ const HallTicket = ({ students: propStudents, onUpdateStudent }) => {
       gender: getStudentInfo(student, 'gender'),
     };
 
-    const mergedData = mergeWithCommonData(studentSpecificData);
+    const mergedData = mergeWithCommonData(studentSpecificData, commonData);
     setHallTicketData(mergedData);
 
     setSelectedStudent(student);
@@ -297,8 +407,8 @@ const HallTicket = ({ students: propStudents, onUpdateStudent }) => {
       const result = await StudentApi.getHallTicket(student.studentId);
       if (result.success && result.hallTicket) {
         setSavedHallTicket(result.hallTicket);
-        const savedData = result.hallTicket.hallTicketData || emptyHallTicketData;
-        const mergedSavedData = mergeWithCommonData(savedData);
+        const savedData = result.hallTicket.hallTicketData || {};
+        const mergedSavedData = mergeWithCommonData(savedData, commonData);
         setHallTicketData(mergedSavedData);
         if (result.hallTicket.imageUrl) {
           setPhotoPreview(result.hallTicket.imageUrl);
@@ -314,7 +424,16 @@ const HallTicket = ({ students: propStudents, onUpdateStudent }) => {
 
   const handleEditHallTicket = () => {
     setIsViewModalOpen(false);
-    setIsEditModalOpen(true);
+    // Refresh data before opening edit modal
+    if (selectedStudent) {
+      const className = getStudentInfo(selectedStudent, 'className');
+      const section = getStudentInfo(selectedStudent, 'section');
+      loadCommonSettings(className, section).then(() => {
+        setIsEditModalOpen(true);
+      });
+    } else {
+      setIsEditModalOpen(true);
+    }
   };
 
   const handlePhotoUpload = (e) => {
@@ -349,13 +468,21 @@ const HallTicket = ({ students: propStudents, onUpdateStudent }) => {
 
     setIsSaving(true);
     try {
+      // Ensure we have the latest common data
+      const className = getStudentInfo(selectedStudent, 'className');
+      const section = getStudentInfo(selectedStudent, 'section');
+      const commonData = await loadCommonSettings(className, section);
+      
+      // Merge student-specific data with common data
+      const mergedData = mergeWithCommonData(hallTicketData, commonData);
+      
       const saveData = {
-        ...hallTicketData,
+        ...mergedData,
         schoolName: schoolInfo.schoolName,
         schoolAddress: schoolInfo.schoolAddress,
         schoolAffiliation: schoolInfo.schoolAffiliation,
-        subjects: Array.isArray(hallTicketData.subjects) ? hallTicketData.subjects : [],
-        instructions: Array.isArray(hallTicketData.instructions) ? hallTicketData.instructions : [],
+        subjects: Array.isArray(mergedData.subjects) ? mergedData.subjects : [],
+        instructions: Array.isArray(mergedData.instructions) ? mergedData.instructions : [],
         version: savedHallTicket?.version || 1,
       };
 
@@ -371,6 +498,8 @@ const HallTicket = ({ students: propStudents, onUpdateStudent }) => {
         if (result.imageUrl) {
           setPhotoPreview(result.imageUrl);
         }
+        // Update the hall ticket data with saved data
+        setHallTicketData(saveData);
         setIsEditModalOpen(false);
         setIsViewModalOpen(true);
       } else {
@@ -387,7 +516,11 @@ const HallTicket = ({ students: propStudents, onUpdateStudent }) => {
   const downloadPDF = async (data, photo, studentName) => {
     setIsDownloading(true);
     try {
-      const mergedData = mergeWithCommonData(data);
+      // Ensure we have the latest common data for the download
+      const className = data.studentClass || '';
+      const section = data.section || '';
+      const commonData = await loadCommonSettings(className, section);
+      const mergedData = mergeWithCommonData(data, commonData);
       
       const element = document.createElement('div');
       element.innerHTML = getHallTicketHTML(mergedData, photo);
@@ -445,6 +578,11 @@ const HallTicket = ({ students: propStudents, onUpdateStudent }) => {
       let successCount = 0;
       let failCount = 0;
 
+      // Get common settings once for the class
+      const grade = selectedSectionData.grade;
+      const section = selectedSectionData.section;
+      const commonData = await loadCommonSettings(grade, section);
+
       for (let i = 0; i < studentsList.length; i++) {
         const student = studentsList[i];
         try {
@@ -455,26 +593,21 @@ const HallTicket = ({ students: propStudents, onUpdateStudent }) => {
             ticketData = result.hallTicket.hallTicketData;
             ticketPhoto = result.hallTicket.imageUrl;
           } else {
-            const className = getStudentInfo(student, 'className');
-            const section = getStudentInfo(student, 'section');
-            
-            await loadCommonSettings(className, section);
-            
             const studentSpecificData = {
               studentName: getStudentInfo(student, 'fullName'),
               fatherName: getStudentInfo(student, 'fatherName'),
               motherName: getStudentInfo(student, 'motherName'),
-              studentClass: className,
+              studentClass: grade,
               section: section,
               rollNumber: `ROLL${student.studentId?.slice(-6)}`,
               gender: getStudentInfo(student, 'gender'),
             };
             
-            ticketData = mergeWithCommonData(studentSpecificData);
+            ticketData = mergeWithCommonData(studentSpecificData, commonData);
             ticketPhoto = null;
           }
 
-          const mergedData = mergeWithCommonData(ticketData);
+          const mergedData = mergeWithCommonData(ticketData, commonData);
           
           const element = document.createElement('div');
           element.innerHTML = getHallTicketHTML(mergedData, ticketPhoto);
@@ -634,6 +767,54 @@ const HallTicket = ({ students: propStudents, onUpdateStudent }) => {
   const removeCommonInstruction = (index) => {
     const updatedInstructions = (commonHallTicketData.instructions || []).filter((_, i) => i !== index);
     setCommonHallTicketData({ ...commonHallTicketData, instructions: updatedInstructions });
+  };
+
+  // Save common data and refresh all views
+  const saveCommonData = async () => {
+    if (!selectedSectionData) {
+      toast.error('No class/section selected');
+      return;
+    }
+    
+    try {
+      setIsSaving(true);
+      const { grade, section } = selectedSectionData;
+      const key = getStorageKey(grade, section);
+      
+      // Save common settings
+      const result = await StudentApi.saveHallTicketSettings(key, commonHallTicketData);
+      
+      if (result.success) {
+        toast.success(`Common settings saved for Grade ${grade} - Section ${section}!`);
+        setIsCommonEditModalOpen(false);
+        
+        // IMPORTANT: Reload common settings to ensure consistency
+        await loadCommonSettings(grade, section, true);
+        
+        // If edit modal is open, refresh the current hall ticket data
+        if (isEditModalOpen && selectedStudent) {
+          await refreshCurrentHallTicketData(commonHallTicketData);
+        }
+        
+        // If view modal is open, refresh the view
+        if (isViewModalOpen && selectedStudent) {
+          const viewData = mergeWithCommonData(hallTicketData, commonHallTicketData);
+          setHallTicketData(viewData);
+        }
+        
+        // Update the hall ticket data in state with merged data
+        const updatedHallTicketData = mergeWithCommonData(hallTicketData, commonHallTicketData);
+        setHallTicketData(updatedHallTicketData);
+        
+      } else {
+        throw new Error(result.error || 'Failed to save common settings');
+      }
+    } catch (error) {
+      console.error('Error saving common data:', error);
+      toast.error(error.message || 'Failed to save common settings');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const getHallTicketHTML = (data, photo) => {
@@ -1085,10 +1266,9 @@ const HallTicket = ({ students: propStudents, onUpdateStudent }) => {
                   <span class="info-label">Gender</span>
                   <span class="info-value">${escapeHtml(safeData.gender || 'N/A')}</span>
                 </div>
+                
               </div>
             </div>
-
-           
 
             <div class="subjects-section">
               <h3>Examination Schedule</h3>
@@ -1134,7 +1314,7 @@ const HallTicket = ({ students: propStudents, onUpdateStudent }) => {
             <div class="signature-section">
               <div class="signature-box">
                 <div class="line"></div>
-                <div class="label">${escapeHtml(safeData.studentSignature || "Student's Signature")}</div>
+                <div class="label">${escapeHtml(safeData.teacherSignature || "Teacher's Signature")}</div>
               </div>
               <div class="signature-box">
                 <div class="line"></div>
@@ -1164,24 +1344,24 @@ const HallTicket = ({ students: propStudents, onUpdateStudent }) => {
       const className = getStudentInfo(student, 'className');
       const section = getStudentInfo(student, 'section');
       
-      await loadCommonSettings(className, section);
+      const commonData = await loadCommonSettings(className, section);
       
       const result = await StudentApi.getHallTicket(student.studentId);
       if (result.success && result.hallTicket) {
         setSavedHallTicket(result.hallTicket);
-        const savedData = result.hallTicket.hallTicketData || emptyHallTicketData;
-        const mergedData = mergeWithCommonData(savedData);
+        const savedData = result.hallTicket.hallTicketData || {};
+        const mergedData = mergeWithCommonData(savedData, commonData);
         setHallTicketData(mergedData);
         if (result.hallTicket.imageUrl) {
           setPhotoPreview(result.hallTicket.imageUrl);
         }
         setIsViewModalOpen(true);
       } else {
-        generateHallTicket(student);
+        await generateHallTicket(student);
       }
     } catch (error) {
       console.error('Error viewing hall ticket:', error);
-      generateHallTicket(student);
+      await generateHallTicket(student);
     } finally {
       setIsLoading(false);
     }
@@ -1197,13 +1377,13 @@ const HallTicket = ({ students: propStudents, onUpdateStudent }) => {
       const className = getStudentInfo(student, 'className');
       const section = getStudentInfo(student, 'section');
       
-      await loadCommonSettings(className, section);
+      const commonData = await loadCommonSettings(className, section);
       
       const result = await StudentApi.getHallTicket(student.studentId);
       if (result.success && result.hallTicket) {
         setSavedHallTicket(result.hallTicket);
-        const savedData = result.hallTicket.hallTicketData || emptyHallTicketData;
-        const mergedData = mergeWithCommonData(savedData);
+        const savedData = result.hallTicket.hallTicketData || {};
+        const mergedData = mergeWithCommonData(savedData, commonData);
         setHallTicketData(mergedData);
         if (result.hallTicket.imageUrl) {
           setPhotoPreview(result.hallTicket.imageUrl);
@@ -1218,7 +1398,7 @@ const HallTicket = ({ students: propStudents, onUpdateStudent }) => {
           rollNumber: `ROLL${student.studentId?.slice(-6)}`,
           gender: getStudentInfo(student, 'gender'),
         };
-        const mergedData = mergeWithCommonData(studentSpecificData);
+        const mergedData = mergeWithCommonData(studentSpecificData, commonData);
         setHallTicketData(mergedData);
         setPhotoPreview(null);
         setPhotoFile(null);
@@ -1240,7 +1420,7 @@ const HallTicket = ({ students: propStudents, onUpdateStudent }) => {
       const className = getStudentInfo(student, 'className');
       const section = getStudentInfo(student, 'section');
       
-      await loadCommonSettings(className, section);
+      const commonData = await loadCommonSettings(className, section);
       
       const result = await StudentApi.getHallTicket(student.studentId);
       let ticketData, ticketPhoto;
@@ -1258,11 +1438,11 @@ const HallTicket = ({ students: propStudents, onUpdateStudent }) => {
           rollNumber: `ROLL${student.studentId?.slice(-6)}`,
           gender: getStudentInfo(student, 'gender'),
         };
-        ticketData = mergeWithCommonData(studentSpecificData);
+        ticketData = mergeWithCommonData(studentSpecificData, commonData);
         ticketPhoto = null;
       }
       
-      const mergedData = mergeWithCommonData(ticketData);
+      const mergedData = mergeWithCommonData(ticketData, commonData);
       await downloadPDF(mergedData, ticketPhoto, student.basicInfo?.name);
     } catch (error) {
       console.error('Error downloading PDF:', error);
@@ -1289,38 +1469,24 @@ const HallTicket = ({ students: propStudents, onUpdateStudent }) => {
     await loadCommonSettings(grade, section);
   };
 
-  const saveCommonData = async () => {
-    try {
-      setIsSaving(true);
-      const { grade, section } = selectedSectionData;
-      const key = getStorageKey(grade, section);
-      
-      const result = await StudentApi.saveHallTicketSettings(key, commonHallTicketData);
-      
-      if (result.success) {
-        toast.success(`Common settings saved for Grade ${grade} - Section ${section}!`);
-        setIsCommonEditModalOpen(false);
-        
-        if (selectedStudent) {
-          const updatedData = mergeWithCommonData(hallTicketData);
-          setHallTicketData(updatedData);
-        }
-      } else {
-        throw new Error(result.error || 'Failed to save common settings');
-      }
-    } catch (error) {
-      console.error('Error saving common data:', error);
-      toast.error(error.message || 'Failed to save common settings');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
   const handleBackToClasses = () => {
     setSelectedClass(null);
     setSelectedSectionData(null);
     setViewMode('class');
     setSearchTerm('');
+    // Reset common data when going back
+    setCommonHallTicketData({
+      examTitle: '',
+      examType: '',
+      subjects: [],
+      instructions: [],
+      teacherSignature: "Teacher's Signature",
+      principalSignature: 'Principal',
+      principalName: '',
+      examController: 'Exam Controller',
+      examControllerName: '',
+    });
+    setIsCommonDataLoaded(false);
   };
 
   const getFilteredStudents = () => {
@@ -1705,7 +1871,7 @@ const HallTicket = ({ students: propStudents, onUpdateStudent }) => {
             </div>
             <div className="p-6">
               <div className="space-y-6">
-                {/* Exam Information */}
+                {/* Exam Information - Only Title and Type */}
                 <div className="border rounded-lg p-4">
                   <h4 className="text-lg font-semibold mb-4 flex items-center gap-2">
                     <Calendar size={20} /> Exam Information
@@ -1713,22 +1879,37 @@ const HallTicket = ({ students: propStudents, onUpdateStudent }) => {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="col-span-2">
                       <label className="block text-sm font-medium text-gray-700 mb-1">Exam Title *</label>
-                      <input type="text" value={commonHallTicketData.examTitle} onChange={(e) => handleCommonFieldChange('examTitle', e.target.value)} placeholder="e.g., ANNUAL EXAMINATION 2025" className="w-full border border-gray-300 rounded-lg px-3 py-2" />
+                      <input 
+                        type="text" 
+                        value={commonHallTicketData.examTitle} 
+                        onChange={(e) => handleCommonFieldChange('examTitle', e.target.value)} 
+                        placeholder="e.g., ANNUAL EXAMINATION 2025" 
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2" 
+                      />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Exam Type</label>
-                      <input type="text" value={commonHallTicketData.examType} onChange={(e) => handleCommonFieldChange('examType', e.target.value)} placeholder="e.g., Annual Examination" className="w-full border border-gray-300 rounded-lg px-3 py-2" />
+                      <input 
+                        type="text" 
+                        value={commonHallTicketData.examType} 
+                        onChange={(e) => handleCommonFieldChange('examType', e.target.value)} 
+                        placeholder="e.g., Annual Examination" 
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2" 
+                      />
                     </div>
                   </div>
                 </div>
 
-                {/* Subjects */}
+                {/* Subjects - Common */}
                 <div className="border rounded-lg p-4">
                   <div className="flex justify-between items-center mb-4">
                     <h4 className="text-lg font-semibold flex items-center gap-2">
                       <BookOpen size={20} /> Subjects
                     </h4>
-                    <button onClick={addCommonSubject} className="px-3 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-1 text-sm">
+                    <button 
+                      onClick={addCommonSubject} 
+                      className="px-3 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-1 text-sm"
+                    >
                       <Plus size={16} /> Add Subject
                     </button>
                   </div>
@@ -1739,28 +1920,64 @@ const HallTicket = ({ students: propStudents, onUpdateStudent }) => {
                     <div key={index} className="border-b pb-4 mb-4">
                       <div className="flex justify-between items-center mb-2">
                         <h5 className="font-medium">Subject {index + 1}</h5>
-                        <button onClick={() => removeCommonSubject(index)} className="text-red-600 hover:text-red-700 text-sm flex items-center gap-1">
+                        <button 
+                          onClick={() => removeCommonSubject(index)} 
+                          className="text-red-600 hover:text-red-700 text-sm flex items-center gap-1"
+                        >
                           <Trash2 size={14} /> Remove
                         </button>
                       </div>
                       <div className="grid grid-cols-3 gap-3">
-                        <input type="text" placeholder="Subject Name *" value={subject.name || ''} onChange={(e) => handleCommonSubjectChange(index, 'name', e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2" />
-                        <input type="text" placeholder="Subject Code" value={subject.code || ''} onChange={(e) => handleCommonSubjectChange(index, 'code', e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2" />
-                        <input type="text" placeholder="Date" value={subject.date || ''} onChange={(e) => handleCommonSubjectChange(index, 'date', e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2" />
-                        <input type="text" placeholder="Time" value={subject.time || ''} onChange={(e) => handleCommonSubjectChange(index, 'time', e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2" />
-                        <input type="text" placeholder="Invigilator Signature" value={subject.invigilatorSignature || ''} onChange={(e) => handleCommonSubjectChange(index, 'invigilatorSignature', e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2" />
+                        <input 
+                          type="text" 
+                          placeholder="Subject Name *" 
+                          value={subject.name || ''} 
+                          onChange={(e) => handleCommonSubjectChange(index, 'name', e.target.value)} 
+                          className="border border-gray-300 rounded-lg px-3 py-2" 
+                        />
+                        <input 
+                          type="text" 
+                          placeholder="Subject Code" 
+                          value={subject.code || ''} 
+                          onChange={(e) => handleCommonSubjectChange(index, 'code', e.target.value)} 
+                          className="border border-gray-300 rounded-lg px-3 py-2" 
+                        />
+                        <input 
+                          type="text" 
+                          placeholder="Date" 
+                          value={subject.date || ''} 
+                          onChange={(e) => handleCommonSubjectChange(index, 'date', e.target.value)} 
+                          className="border border-gray-300 rounded-lg px-3 py-2" 
+                        />
+                        <input 
+                          type="text" 
+                          placeholder="Time" 
+                          value={subject.time || ''} 
+                          onChange={(e) => handleCommonSubjectChange(index, 'time', e.target.value)} 
+                          className="border border-gray-300 rounded-lg px-3 py-2" 
+                        />
+                        <input 
+                          type="text" 
+                          placeholder="Invigilator Signature" 
+                          value={subject.invigilatorSignature || ''} 
+                          onChange={(e) => handleCommonSubjectChange(index, 'invigilatorSignature', e.target.value)} 
+                          className="border border-gray-300 rounded-lg px-3 py-2" 
+                        />
                       </div>
                     </div>
                   ))}
                 </div>
 
-                {/* Instructions */}
+                {/* Instructions - Common */}
                 <div className="border rounded-lg p-4">
                   <div className="flex justify-between items-center mb-4">
                     <h4 className="text-lg font-semibold flex items-center gap-2">
                       <FileText size={20} /> Instructions
                     </h4>
-                    <button onClick={addCommonInstruction} className="px-3 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-1 text-sm">
+                    <button 
+                      onClick={addCommonInstruction} 
+                      className="px-3 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-1 text-sm"
+                    >
                       <Plus size={16} /> Add Instruction
                     </button>
                   </div>
@@ -1769,47 +1986,93 @@ const HallTicket = ({ students: propStudents, onUpdateStudent }) => {
                   )}
                   {commonHallTicketData.instructions && commonHallTicketData.instructions.map((instruction, index) => (
                     <div key={index} className="flex gap-2 mb-2">
-                      <input type="text" value={instruction || ''} onChange={(e) => handleCommonInstructionChange(index, e.target.value)} className="flex-1 border border-gray-300 rounded-lg px-3 py-2" placeholder={`Instruction ${index + 1}`} />
-                      <button onClick={() => removeCommonInstruction(index)} className="text-red-600 hover:text-red-700">
+                      <input 
+                        type="text" 
+                        value={instruction || ''} 
+                        onChange={(e) => handleCommonInstructionChange(index, e.target.value)} 
+                        className="flex-1 border border-gray-300 rounded-lg px-3 py-2" 
+                        placeholder={`Instruction ${index + 1}`} 
+                      />
+                      <button 
+                        onClick={() => removeCommonInstruction(index)} 
+                        className="text-red-600 hover:text-red-700"
+                      >
                         <Trash2 size={18} />
                       </button>
                     </div>
                   ))}
                 </div>
 
-                {/* Signatures */}
+                {/* Signatures - Common */}
                 <div className="border rounded-lg p-4">
                   <h4 className="text-lg font-semibold mb-4">Signatures</h4>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Student Signature Label</label>
-                      <input type="text" value={commonHallTicketData.studentSignature} onChange={(e) => handleCommonFieldChange('studentSignature', e.target.value)} placeholder="e.g., Student's Signature" className="w-full border border-gray-300 rounded-lg px-3 py-2" />
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Teacher Signature Label</label>
+                      <input 
+                        type="text" 
+                        value={commonHallTicketData.teacherSignature} 
+                        onChange={(e) => handleCommonFieldChange('teacherSignature', e.target.value)} 
+                        placeholder="e.g., Teacher's Signature" 
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2" 
+                      />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Principal Signature Label</label>
-                      <input type="text" value={commonHallTicketData.principalSignature} onChange={(e) => handleCommonFieldChange('principalSignature', e.target.value)} placeholder="e.g., Principal" className="w-full border border-gray-300 rounded-lg px-3 py-2" />
+                      <input 
+                        type="text" 
+                        value={commonHallTicketData.principalSignature} 
+                        onChange={(e) => handleCommonFieldChange('principalSignature', e.target.value)} 
+                        placeholder="e.g., Principal" 
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2" 
+                      />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Principal Name</label>
-                      <input type="text" value={commonHallTicketData.principalName} onChange={(e) => handleCommonFieldChange('principalName', e.target.value)} placeholder="Enter principal's name" className="w-full border border-gray-300 rounded-lg px-3 py-2" />
+                      <input 
+                        type="text" 
+                        value={commonHallTicketData.principalName} 
+                        onChange={(e) => handleCommonFieldChange('principalName', e.target.value)} 
+                        placeholder="Enter principal's name" 
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2" 
+                      />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Exam Controller Label</label>
-                      <input type="text" value={commonHallTicketData.examController} onChange={(e) => handleCommonFieldChange('examController', e.target.value)} placeholder="e.g., Exam Controller" className="w-full border border-gray-300 rounded-lg px-3 py-2" />
+                      <input 
+                        type="text" 
+                        value={commonHallTicketData.examController} 
+                        onChange={(e) => handleCommonFieldChange('examController', e.target.value)} 
+                        placeholder="e.g., Exam Controller" 
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2" 
+                      />
                     </div>
                     <div className="col-span-2">
                       <label className="block text-sm font-medium text-gray-700 mb-1">Exam Controller Name</label>
-                      <input type="text" value={commonHallTicketData.examControllerName} onChange={(e) => handleCommonFieldChange('examControllerName', e.target.value)} placeholder="Enter exam controller's name" className="w-full border border-gray-300 rounded-lg px-3 py-2" />
+                      <input 
+                        type="text" 
+                        value={commonHallTicketData.examControllerName} 
+                        onChange={(e) => handleCommonFieldChange('examControllerName', e.target.value)} 
+                        placeholder="Enter exam controller's name" 
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2" 
+                      />
                     </div>
                   </div>
                 </div>
               </div>
 
               <div className="mt-6 flex justify-end space-x-3 pt-4 border-t">
-                <button onClick={() => setIsCommonEditModalOpen(false)} className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400">
+                <button 
+                  onClick={() => setIsCommonEditModalOpen(false)} 
+                  className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400"
+                >
                   Cancel
                 </button>
-                <button onClick={saveCommonData} disabled={isSaving} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2 disabled:opacity-50">
+                <button 
+                  onClick={saveCommonData} 
+                  disabled={isSaving} 
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2 disabled:opacity-50"
+                >
                   {isSaving ? (
                     <>
                       <Loader className="animate-spin" size={18} />
@@ -1844,7 +2107,10 @@ const HallTicket = ({ students: propStudents, onUpdateStudent }) => {
                 return <div dangerouslySetInnerHTML={{ __html: getHallTicketHTML(mergedData, photoPreview) }} />;
               })()}
               <div className="mt-6 flex justify-end space-x-3 pt-4 border-t">
-                <button onClick={handleEditHallTicket} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
+                <button 
+                  onClick={handleEditHallTicket} 
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                >
                   Edit Hall Ticket
                 </button>
                 <button 
@@ -1867,7 +2133,10 @@ const HallTicket = ({ students: propStudents, onUpdateStudent }) => {
                     </>
                   )}
                 </button>
-                <button onClick={downloadHallTicket} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2">
+                <button 
+                  onClick={downloadHallTicket} 
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2"
+                >
                   <Printer size={18} />
                   <span>Print</span>
                 </button>
@@ -1896,6 +2165,7 @@ const HallTicket = ({ students: propStudents, onUpdateStudent }) => {
                 </div>
               ) : (
                 <div className="space-y-6">
+                  {/* School Information - Read Only */}
                   <div className="border rounded-lg p-4 bg-gray-50">
                     <h4 className="text-lg font-semibold mb-4 flex items-center gap-2">
                       <Building size={20} /> School Information (Global)
@@ -1903,15 +2173,30 @@ const HallTicket = ({ students: propStudents, onUpdateStudent }) => {
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">School Name</label>
-                        <input type="text" value={schoolInfo.schoolName} className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-gray-100" readOnly />
+                        <input 
+                          type="text" 
+                          value={schoolInfo.schoolName} 
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-gray-100" 
+                          readOnly 
+                        />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">School Affiliation</label>
-                        <input type="text" value={schoolInfo.schoolAffiliation} className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-gray-100" readOnly />
+                        <input 
+                          type="text" 
+                          value={schoolInfo.schoolAffiliation} 
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-gray-100" 
+                          readOnly 
+                        />
                       </div>
                       <div className="col-span-2">
                         <label className="block text-sm font-medium text-gray-700 mb-1">School Address</label>
-                        <input type="text" value={schoolInfo.schoolAddress} className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-gray-100" readOnly />
+                        <input 
+                          type="text" 
+                          value={schoolInfo.schoolAddress} 
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-gray-100" 
+                          readOnly 
+                        />
                       </div>
                     </div>
                     <button 
@@ -1925,6 +2210,7 @@ const HallTicket = ({ students: propStudents, onUpdateStudent }) => {
                     </button>
                   </div>
 
+                  {/* Student Information - Read Only */}
                   <div className="border rounded-lg p-4">
                     <h4 className="text-lg font-semibold mb-4 flex items-center gap-2">
                       <User size={20} /> Student Information
@@ -1932,157 +2218,265 @@ const HallTicket = ({ students: propStudents, onUpdateStudent }) => {
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Student Name</label>
-                        <input type="text" value={hallTicketData.studentName} className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-gray-50" readOnly />
+                        <input 
+                          type="text" 
+                          value={hallTicketData.studentName} 
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-gray-50" 
+                          readOnly 
+                        />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Father's Name</label>
-                        <input type="text" value={hallTicketData.fatherName} className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-gray-50" readOnly />
+                        <input 
+                          type="text" 
+                          value={hallTicketData.fatherName} 
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-gray-50" 
+                          readOnly 
+                        />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Mother's Name</label>
-                        <input type="text" value={hallTicketData.motherName} className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-gray-50" readOnly />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Roll Number</label>
-                        <input type="text" value={hallTicketData.rollNumber} onChange={(e) => handleFieldChange('rollNumber', e.target.value)} placeholder="Enter roll number" className="w-full border border-gray-300 rounded-lg px-3 py-2" />
+                        <input 
+                          type="text" 
+                          value={hallTicketData.motherName} 
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-gray-50" 
+                          readOnly 
+                        />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Class</label>
-                        <input type="text" value={hallTicketData.studentClass} className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-gray-50" readOnly />
+                        <input 
+                          type="text" 
+                          value={hallTicketData.studentClass} 
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-gray-50" 
+                          readOnly 
+                        />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Section</label>
-                        <input type="text" value={hallTicketData.section} className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-gray-50" readOnly />
+                        <input 
+                          type="text" 
+                          value={hallTicketData.section} 
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-gray-50" 
+                          readOnly 
+                        />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Gender</label>
-                        <select value={hallTicketData.gender} className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-gray-50" disabled>
+                        <select 
+                          value={hallTicketData.gender} 
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-gray-50" 
+                          disabled
+                        >
                           <option value="">Select</option>
                           <option value="Male">Male</option>
                           <option value="Female">Female</option>
                           <option value="Other">Other</option>
                         </select>
                       </div>
+                    </div>
+                  </div>
+
+                  {/* Individual Editable Fields */}
+                  <div className="border rounded-lg p-4 bg-blue-50">
+                    <h4 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                      <Edit size={20} /> Individual Student Details (Editable)
+                    </h4>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Roll Number</label>
+                        <input 
+                          type="text" 
+                          value={hallTicketData.rollNumber} 
+                          onChange={(e) => handleFieldChange('rollNumber', e.target.value)} 
+                          placeholder="Enter roll number" 
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white" 
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Exam Date</label>
+                        <input 
+                          type="text" 
+                          value={hallTicketData.examDate} 
+                          onChange={(e) => handleFieldChange('examDate', e.target.value)} 
+                          placeholder="e.g., March 15, 2025" 
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white" 
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Exam Time</label>
+                        <input 
+                          type="text" 
+                          value={hallTicketData.examTime} 
+                          onChange={(e) => handleFieldChange('examTime', e.target.value)} 
+                          placeholder="e.g., 10:00 AM - 1:00 PM" 
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white" 
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Exam Duration</label>
+                        <input 
+                          type="text" 
+                          value={hallTicketData.examDuration} 
+                          onChange={(e) => handleFieldChange('examDuration', e.target.value)} 
+                          placeholder="e.g., 3 Hours" 
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white" 
+                        />
+                      </div>
                       <div className="col-span-2">
                         <label className="block text-sm font-medium text-gray-700 mb-1">Student Photo</label>
                         <div className="flex items-center space-x-4">
-                          <input type="file" accept="image/jpeg,image/jpg,image/png,image/gif,image/webp" onChange={handlePhotoUpload} className="flex-1 border border-gray-300 rounded-lg px-3 py-2" />
+                          <input 
+                            type="file" 
+                            accept="image/jpeg,image/jpg,image/png,image/gif,image/webp" 
+                            onChange={handlePhotoUpload} 
+                            className="flex-1 border border-gray-300 rounded-lg px-3 py-2 bg-white" 
+                          />
                           {photoPreview && <img src={photoPreview} alt="Preview" className="w-12 h-12 object-cover rounded" />}
                         </div>
                         <p className="text-xs text-gray-500 mt-1">Max size: 5MB. Allowed: JPEG, PNG, GIF, WEBP</p>
                       </div>
+                      <div className="col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Teacher Signature Label</label>
+                        <input 
+                          type="text" 
+                          value={hallTicketData.teacherSignature} 
+                          onChange={(e) => handleFieldChange('teacherSignature', e.target.value)} 
+                          placeholder="e.g., Teacher's Signature" 
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white" 
+                        />
+                      </div>
                     </div>
                   </div>
 
-                  <div className="border rounded-lg p-4">
+                  {/* Common Information - Read Only */}
+                  <div className="border rounded-lg p-4 bg-gray-50">
                     <h4 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                      <Calendar size={20} /> Exam Information
+                      <BookOpen size={20} /> Common Information (From Common Settings)
                     </h4>
                     <div className="grid grid-cols-2 gap-4">
+                      <div className="col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Exam Title</label>
+                        <input 
+                          type="text" 
+                          value={hallTicketData.examTitle} 
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-gray-100" 
+                          readOnly 
+                        />
+                      </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Exam Type</label>
-                        <input type="text" value={hallTicketData.examType} onChange={(e) => handleFieldChange('examType', e.target.value)} placeholder="e.g., Annual Examination" className="w-full border border-gray-300 rounded-lg px-3 py-2" />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Exam Date</label>
-                        <input type="text" value={hallTicketData.examDate} onChange={(e) => handleFieldChange('examDate', e.target.value)} placeholder="e.g., March 15, 2025" className="w-full border border-gray-300 rounded-lg px-3 py-2" />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Exam Time</label>
-                        <input type="text" value={hallTicketData.examTime} onChange={(e) => handleFieldChange('examTime', e.target.value)} placeholder="e.g., 10:00 AM - 1:00 PM" className="w-full border border-gray-300 rounded-lg px-3 py-2" />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Exam Duration</label>
-                        <input type="text" value={hallTicketData.examDuration} onChange={(e) => handleFieldChange('examDuration', e.target.value)} placeholder="e.g., 3 Hours" className="w-full border border-gray-300 rounded-lg px-3 py-2" />
+                        <input 
+                          type="text" 
+                          value={hallTicketData.examType} 
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-gray-100" 
+                          readOnly 
+                        />
                       </div>
                     </div>
-                  </div>
-
-                  <div className="border rounded-lg p-4">
-                    <div className="flex justify-between items-center mb-4">
-                      <h4 className="text-lg font-semibold flex items-center gap-2">
-                        <BookOpen size={20} /> Subjects
-                      </h4>
-                      <button onClick={addSubject} className="px-3 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-1 text-sm">
-                        <Plus size={16} /> Add Subject
-                      </button>
-                    </div>
-                    {(!hallTicketData.subjects || hallTicketData.subjects.length === 0) && (
-                      <p className="text-gray-500 text-center py-4">No subjects added. Click "Add Subject" to add exam subjects.</p>
-                    )}
-                    {hallTicketData.subjects && hallTicketData.subjects.map((subject, index) => (
-                      <div key={index} className="border-b pb-4 mb-4">
-                        <div className="flex justify-between items-center mb-2">
-                          <h5 className="font-medium">Subject {index + 1}</h5>
-                          <button onClick={() => removeSubject(index)} className="text-red-600 hover:text-red-700 text-sm flex items-center gap-1">
-                            <Trash2 size={14} /> Remove
-                          </button>
+                    <div className="mt-4">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Subjects</label>
+                      {hallTicketData.subjects && hallTicketData.subjects.length > 0 ? (
+                        <div className="space-y-2">
+                          {hallTicketData.subjects.map((subject, index) => (
+                            <div key={index} className="border rounded p-2 bg-white">
+                              <div className="grid grid-cols-5 gap-2 text-sm">
+                                <div><span className="font-medium">Name:</span> {subject.name || '-'}</div>
+                                <div><span className="font-medium">Code:</span> {subject.code || '-'}</div>
+                                <div><span className="font-medium">Date:</span> {subject.date || '-'}</div>
+                                <div><span className="font-medium">Time:</span> {subject.time || '-'}</div>
+                                <div><span className="font-medium">Invigilator:</span> {subject.invigilatorSignature || '-'}</div>
+                              </div>
+                            </div>
+                          ))}
                         </div>
-                        <div className="grid grid-cols-3 gap-3">
-                          <input type="text" placeholder="Subject Name" value={subject.name || ''} onChange={(e) => handleSubjectChange(index, 'name', e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2" />
-                          <input type="text" placeholder="Subject Code" value={subject.code || ''} onChange={(e) => handleSubjectChange(index, 'code', e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2" />
-                          <input type="text" placeholder="Date" value={subject.date || ''} onChange={(e) => handleSubjectChange(index, 'date', e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2" />
-                          <input type="text" placeholder="Time" value={subject.time || ''} onChange={(e) => handleSubjectChange(index, 'time', e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2" />
-                          <input type="text" placeholder="Invigilator Signature" value={subject.invigilatorSignature || ''} onChange={(e) => handleSubjectChange(index, 'invigilatorSignature', e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2" />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="border rounded-lg p-4">
-                    <div className="flex justify-between items-center mb-4">
-                      <h4 className="text-lg font-semibold flex items-center gap-2">
-                        <FileText size={20} /> Instructions
-                      </h4>
-                      <button onClick={addInstruction} className="px-3 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-1 text-sm">
-                        <Plus size={16} /> Add Instruction
-                      </button>
+                      ) : (
+                        <p className="text-gray-500 text-center py-2">No subjects added in common settings.</p>
+                      )}
                     </div>
-                    {(!hallTicketData.instructions || hallTicketData.instructions.length === 0) && (
-                      <p className="text-gray-500 text-center py-4">No instructions added. Click "Add Instruction" to add exam instructions.</p>
-                    )}
-                    {hallTicketData.instructions && hallTicketData.instructions.map((instruction, index) => (
-                      <div key={index} className="flex gap-2 mb-2">
-                        <input type="text" value={instruction || ''} onChange={(e) => handleInstructionChange(index, e.target.value)} className="flex-1 border border-gray-300 rounded-lg px-3 py-2" placeholder={`Instruction ${index + 1}`} />
-                        <button onClick={() => removeInstruction(index)} className="text-red-600 hover:text-red-700">
-                          <Trash2 size={18} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="border rounded-lg p-4">
-                    <h4 className="text-lg font-semibold mb-4">Signatures</h4>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Student Signature Label</label>
-                        <input type="text" value={hallTicketData.studentSignature} onChange={(e) => handleFieldChange('studentSignature', e.target.value)} placeholder="e.g., Student's Signature" className="w-full border border-gray-300 rounded-lg px-3 py-2" />
-                      </div>
+                    <div className="mt-4">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Instructions</label>
+                      {hallTicketData.instructions && hallTicketData.instructions.length > 0 ? (
+                        <ul className="list-disc list-inside border rounded p-2 bg-white">
+                          {hallTicketData.instructions.map((instruction, index) => (
+                            <li key={index} className="text-sm">{instruction}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="text-gray-500 text-center py-2">No instructions added in common settings.</p>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 mt-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Principal Signature Label</label>
-                        <input type="text" value={hallTicketData.principalSignature} onChange={(e) => handleFieldChange('principalSignature', e.target.value)} placeholder="e.g., Principal" className="w-full border border-gray-300 rounded-lg px-3 py-2" />
+                        <input 
+                          type="text" 
+                          value={hallTicketData.principalSignature} 
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-gray-100" 
+                          readOnly 
+                        />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Principal Name</label>
-                        <input type="text" value={hallTicketData.principalName} onChange={(e) => handleFieldChange('principalName', e.target.value)} placeholder="Enter principal's name" className="w-full border border-gray-300 rounded-lg px-3 py-2" />
+                        <input 
+                          type="text" 
+                          value={hallTicketData.principalName} 
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-gray-100" 
+                          readOnly 
+                        />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Exam Controller Label</label>
-                        <input type="text" value={hallTicketData.examController} onChange={(e) => handleFieldChange('examController', e.target.value)} placeholder="e.g., Exam Controller" className="w-full border border-gray-300 rounded-lg px-3 py-2" />
+                        <input 
+                          type="text" 
+                          value={hallTicketData.examController} 
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-gray-100" 
+                          readOnly 
+                        />
                       </div>
-                      <div className="col-span-2">
+                      <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Exam Controller Name</label>
-                        <input type="text" value={hallTicketData.examControllerName} onChange={(e) => handleFieldChange('examControllerName', e.target.value)} placeholder="Enter exam controller's name" className="w-full border border-gray-300 rounded-lg px-3 py-2" />
+                        <input 
+                          type="text" 
+                          value={hallTicketData.examControllerName} 
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-gray-100" 
+                          readOnly 
+                        />
                       </div>
                     </div>
+                    <button 
+                      onClick={() => {
+                        setIsEditModalOpen(false);
+                        setIsCommonEditModalOpen(true);
+                      }}
+                      className="mt-4 text-blue-600 hover:text-blue-700 text-sm font-medium flex items-center gap-1"
+                    >
+                      <Edit size={14} /> Edit Common Settings
+                    </button>
+                  </div>
+
+                  <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                    <p className="text-sm text-yellow-700 flex items-center gap-2">
+                      <span className="font-semibold">ℹ️ Note:</span> 
+                      Subjects, Instructions, Principal, and Exam Controller details are managed in Common Settings. 
+                      Changes there will reflect for all students in this class/section.
+                    </p>
                   </div>
                 </div>
               )}
               <div className="mt-6 flex justify-end space-x-3 pt-4 border-t">
-                <button onClick={() => setIsEditModalOpen(false)} className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400" disabled={isSaving}>
+                <button 
+                  onClick={() => setIsEditModalOpen(false)} 
+                  className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400" 
+                  disabled={isSaving}
+                >
                   Cancel
                 </button>
-                <button onClick={handleSaveHallTicket} disabled={isSaving} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center space-x-2 disabled:opacity-50">
+                <button 
+                  onClick={handleSaveHallTicket} 
+                  disabled={isSaving} 
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center space-x-2 disabled:opacity-50"
+                >
                   {isSaving ? (
                     <>
                       <Loader className="animate-spin" size={18} />
