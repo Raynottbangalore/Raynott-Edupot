@@ -1,6 +1,6 @@
 // src/components/dashboard/Dashboard.jsx
 import React, { useState, useEffect, useCallback } from 'react';
-import { LogOut, Users, UserPlus, List, BarChart3, Search, DollarSign, Award, Ticket } from 'lucide-react';
+import { LogOut, Users, UserPlus, List, BarChart3, Search, DollarSign, Award, Ticket, School, MapPin, Award as AwardIcon, Edit, X, Save, Loader, Building } from 'lucide-react';
 import StudentList from '../Components/StudentList';
 import AllStudents from '../Components/AllStudents';
 import AddStudent from '../Components/AddStudents';
@@ -22,8 +22,39 @@ const Dashboard = ({ user, onLogout }) => {
   const [filteredStudents, setFilteredStudents] = useState([]);
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [schoolInfo, setSchoolInfo] = useState({
+    schoolName: '',
+    schoolAddress: '',
+    schoolAffiliation: ''
+  });
+  const [isSchoolInfoLoading, setIsSchoolInfoLoading] = useState(true);
+  
+  // School Info Modal States
+  const [isSchoolInfoModalOpen, setIsSchoolInfoModalOpen] = useState(false);
+  const [editingSchoolInfo, setEditingSchoolInfo] = useState({
+    schoolName: '',
+    schoolAddress: '',
+    schoolAffiliation: ''
+  });
+  const [isSavingSchoolInfo, setIsSavingSchoolInfo] = useState(false);
 
   const navigate = useNavigate();
+
+  // Load school info
+  const loadSchoolInfo = useCallback(async () => {
+    setIsSchoolInfoLoading(true);
+    try {
+      const result = await StudentApi.getSchoolInfo();
+      if (result.success && result.data) {
+        setSchoolInfo(result.data);
+        setEditingSchoolInfo(result.data);
+      }
+    } catch (error) {
+      console.error('Error loading school info:', error);
+    } finally {
+      setIsSchoolInfoLoading(false);
+    }
+  }, []);
 
   // Create a refresh function
   const refreshStudents = useCallback(async () => {
@@ -52,7 +83,8 @@ const Dashboard = ({ user, onLogout }) => {
   // Initial load
   useEffect(() => {
     refreshStudents();
-  }, [refreshStudents]);
+    loadSchoolInfo();
+  }, [refreshStudents, loadSchoolInfo]);
 
   // Refresh when tab changes to 'allStudents'
   useEffect(() => {
@@ -119,7 +151,7 @@ const Dashboard = ({ user, onLogout }) => {
   };
 
   const handleUpdateStudent = async () => {
-    await refreshStudents(); // Refresh after update
+    await refreshStudents(); 
   };
 
   const handleLogout = async () => {
@@ -135,44 +167,121 @@ const Dashboard = ({ user, onLogout }) => {
     }
   };
 
+  // School Info Modal Handlers
+  const openSchoolInfoModal = () => {
+    setEditingSchoolInfo({ ...schoolInfo });
+    setIsSchoolInfoModalOpen(true);
+  };
+
+  const closeSchoolInfoModal = () => {
+    setIsSchoolInfoModalOpen(false);
+  };
+
+  const handleSchoolInfoChange = (field, value) => {
+    setEditingSchoolInfo({ ...editingSchoolInfo, [field]: value });
+  };
+
+  const handleSaveSchoolInfo = async () => {
+    if (!editingSchoolInfo.schoolName.trim()) {
+      toast.error('School name is required');
+      return;
+    }
+
+    setIsSavingSchoolInfo(true);
+    try {
+      const result = await StudentApi.saveSchoolInfo(editingSchoolInfo);
+      if (result.success) {
+        toast.success('School information saved successfully!');
+        setSchoolInfo(result.data);
+        setIsSchoolInfoModalOpen(false);
+      } else {
+        throw new Error(result.error || 'Failed to save school info');
+      }
+    } catch (error) {
+      console.error('Error saving school info:', error);
+      toast.error(error.message || 'Failed to save school information');
+    } finally {
+      setIsSavingSchoolInfo(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100">
-      {/* Header */}
+      {/* Header with School Info */}
       <header className="bg-gradient-to-r from-amber-800 via-amber-700 to-amber-600 shadow-lg">
-        <div className="px-6 py-4 flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-bold text-white">Raynott Edupot</h1>
-            <p className="text-amber-100">School Fee Management System</p>
-          </div>
-          <div className="flex items-center space-x-6">
-            <div className="text-right">
-              <p className="font-semibold text-lg text-white">Welcome</p>
-              {/* <p className="text-sm text-amber-200">{user?.email}</p> */}
+        <div className="px-6 py-4">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+            {/* Left Side - School Info */}
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-3">
+                <div className="p-2 bg-amber-600/30 rounded-xl">
+                  <School className="text-white" size={24} />
+                </div>
+                <div>
+                  <h1 className="text-2xl font-bold text-white">
+                    {isSchoolInfoLoading ? 'Loading...' : schoolInfo.schoolName || 'School Name'}
+                  </h1>
+                  <div className="flex flex-wrap items-center space-x-3 text-xs">
+                    {schoolInfo.schoolAffiliation && (
+                      <span className="flex items-center space-x-1 text-amber-100">
+                        <AwardIcon size={12} />
+                        <span>{schoolInfo.schoolAffiliation}</span>
+                      </span>
+                    )}
+                    {schoolInfo.schoolAddress && (
+                      <>
+                        <span className="text-amber-300/50">|</span>
+                        <span className="flex items-center space-x-1 text-amber-200/80">
+                          <MapPin size={12} />
+                          <span>{schoolInfo.schoolAddress}</span>
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
-            <button
-              onClick={handleLogout}
-              className="flex items-center space-x-2 px-5 py-2.5 bg-white/20 hover:bg-white/30 rounded-xl transition-all duration-300 backdrop-blur-sm text-white"
-            >
-              <LogOut size={18} />
-              <span className="font-medium">Logout</span>
-            </button>
+            
+            {/* Right Side - Action Buttons */}
+            <div className="flex items-center space-x-3">
+              {/* School Info Edit Button - Purple Color */}
+              <button
+                onClick={openSchoolInfoModal}
+                className="flex items-center space-x-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-xl transition-all duration-300 text-white text-sm font-medium shadow-lg hover:shadow-xl"
+                title="Edit School Information"
+              >
+                <Building size={16} />
+                <span>School Info</span>
+                <Edit size={14} />
+              </button>
+
+              {/* Logout Button */}
+              <button
+                onClick={handleLogout}
+                className="flex items-center space-x-2 px-4 py-2 bg-red-600 hover:bg-red-700 rounded-xl transition-all duration-300 backdrop-blur-sm text-white text-sm font-medium"
+              >
+                <LogOut size={16} />
+                <span>Logout</span>
+              </button>
+            </div>
           </div>
         </div>
       </header>
 
-      {/* Navigation Tabs - FIXED */}
-      <div className="border-b border-gray-200 bg-white shadow-sm">
+      {/* Navigation Tabs */}
+      <div className="border-b border-gray-200 bg-white shadow-sm overflow-x-auto">
         <div className="px-6">
-          <nav className="flex space-x-8">
+          <nav className="flex space-x-4 md:space-x-8 min-w-max">
             <button
               onClick={() => setActiveTab('search')}
-              className={`px-4 py-4 font-medium text-sm transition-all relative ${activeTab === 'search'
-                ? 'text-amber-600'
-                : 'text-gray-500 hover:text-gray-700'
-                }`}
+              className={`px-3 py-4 font-medium text-sm transition-all relative whitespace-nowrap ${
+                activeTab === 'search'
+                  ? 'text-amber-600'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
             >
               <div className="flex items-center space-x-2">
-                <Search size={18} />
+                <Search size={16} />
                 <span>Search & Filter</span>
               </div>
               {activeTab === 'search' && (
@@ -182,13 +291,14 @@ const Dashboard = ({ user, onLogout }) => {
 
             <button
               onClick={() => setActiveTab('allStudents')}
-              className={`px-4 py-4 font-medium text-sm transition-all relative ${activeTab === 'allStudents'
-                ? 'text-amber-600'
-                : 'text-gray-500 hover:text-gray-700'
-                }`}
+              className={`px-3 py-4 font-medium text-sm transition-all relative whitespace-nowrap ${
+                activeTab === 'allStudents'
+                  ? 'text-amber-600'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
             >
               <div className="flex items-center space-x-2">
-                <List size={18} />
+                <List size={16} />
                 <span>All Students</span>
               </div>
               {activeTab === 'allStudents' && (
@@ -198,13 +308,14 @@ const Dashboard = ({ user, onLogout }) => {
 
             <button
               onClick={() => setActiveTab('addStudent')}
-              className={`px-4 py-4 font-medium text-sm transition-all relative ${activeTab === 'addStudent'
-                ? 'text-amber-600'
-                : 'text-gray-500 hover:text-gray-700'
-                }`}
+              className={`px-3 py-4 font-medium text-sm transition-all relative whitespace-nowrap ${
+                activeTab === 'addStudent'
+                  ? 'text-amber-600'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
             >
               <div className="flex items-center space-x-2">
-                <UserPlus size={18} />
+                <UserPlus size={16} />
                 <span>Add New Student</span>
               </div>
               {activeTab === 'addStudent' && (
@@ -214,13 +325,14 @@ const Dashboard = ({ user, onLogout }) => {
 
             <button
               onClick={() => setActiveTab('fees')}
-              className={`px-4 py-4 font-medium text-sm transition-all relative ${activeTab === 'fees'
-                ? 'text-amber-600'
-                : 'text-gray-500 hover:text-gray-700'
-                }`}
+              className={`px-3 py-4 font-medium text-sm transition-all relative whitespace-nowrap ${
+                activeTab === 'fees'
+                  ? 'text-amber-600'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
             >
               <div className="flex items-center space-x-2">
-                <DollarSign size={18} />
+                <DollarSign size={16} />
                 <span>Fees</span>
               </div>
               {activeTab === 'fees' && (
@@ -230,13 +342,14 @@ const Dashboard = ({ user, onLogout }) => {
 
             <button
               onClick={() => setActiveTab('marks')}
-              className={`px-4 py-4 font-medium text-sm transition-all relative ${activeTab === 'marks'
-                ? 'text-amber-600'
-                : 'text-gray-500 hover:text-gray-700'
-                }`}
+              className={`px-3 py-4 font-medium text-sm transition-all relative whitespace-nowrap ${
+                activeTab === 'marks'
+                  ? 'text-amber-600'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
             >
               <div className="flex items-center space-x-2">
-                <Award size={18} />
+                <Award size={16} />
                 <span>Marks</span>
               </div>
               {activeTab === 'marks' && (
@@ -245,14 +358,33 @@ const Dashboard = ({ user, onLogout }) => {
             </button>
 
             <button
-              onClick={() => setActiveTab('assessment')}
-              className={`px-4 py-4 font-medium text-sm transition-all relative ${activeTab === 'assessment'
-                ? 'text-amber-600'
-                : 'text-gray-500 hover:text-gray-700'
-                }`}
+              onClick={() => setActiveTab('marksCard')}
+              className={`px-3 py-4 font-medium text-sm transition-all relative whitespace-nowrap ${
+                activeTab === 'marksCard'
+                  ? 'text-amber-600'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
             >
               <div className="flex items-center space-x-2">
-                <BarChart3 size={18} />
+                <Award size={16} />
+                <span>Marks Card</span>
+              </div>
+              {activeTab === 'marksCard' && (
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-amber-600"></div>
+              )}
+            </button>
+
+
+            <button
+              onClick={() => setActiveTab('assessment')}
+              className={`px-3 py-4 font-medium text-sm transition-all relative whitespace-nowrap ${
+                activeTab === 'assessment'
+                  ? 'text-amber-600'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <div className="flex items-center space-x-2">
+                <BarChart3 size={16} />
                 <span>Assessment Reports</span>
               </div>
               {activeTab === 'assessment' && (
@@ -260,33 +392,33 @@ const Dashboard = ({ user, onLogout }) => {
               )}
             </button>
 
-            {/* FIXED: Teachers Assessment button */}
             <button
               onClick={() => setActiveTab('teachers')}
-              className={`px-4 py-4 font-medium text-sm transition-all relative ${activeTab === 'teachers'
-                ? 'text-amber-600'
-                : 'text-gray-500 hover:text-gray-700'
-                }`}
+              className={`px-3 py-4 font-medium text-sm transition-all relative whitespace-nowrap ${
+                activeTab === 'teachers'
+                  ? 'text-amber-600'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
             >
               <div className="flex items-center space-x-2">
-                <BarChart3 size={18} />
-                <span>Teachers Assessment Report</span>
+                <BarChart3 size={16} />
+                <span>Teachers Assessment</span>
               </div>
               {activeTab === 'teachers' && (
                 <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-amber-600"></div>
               )}
             </button>
 
-            {/* FIXED: Hall Ticket button */}
             <button
-              onClick={() => setActiveTab('hallticket')} // Fixed typo: 'halltickect' -> 'hallticket'
-              className={`px-4 py-4 font-medium text-sm transition-all relative ${activeTab === 'hallticket'
-                ? 'text-amber-600'
-                : 'text-gray-500 hover:text-gray-700'
-                }`}
+              onClick={() => setActiveTab('hallticket')}
+              className={`px-3 py-4 font-medium text-sm transition-all relative whitespace-nowrap ${
+                activeTab === 'hallticket'
+                  ? 'text-amber-600'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
             >
               <div className="flex items-center space-x-2">
-                <Ticket size={18} />
+                <Ticket size={16} />
                 <span>Hall Ticket</span>
               </div>
               {activeTab === 'hallticket' && (
@@ -294,78 +426,155 @@ const Dashboard = ({ user, onLogout }) => {
               )}
             </button>
 
-            <button
-              onClick={() => setActiveTab('marksCard')}
-              className={`px-4 py-4 font-medium text-sm transition-all relative ${activeTab === 'marksCard'
-                ? 'text-amber-600'
-                : 'text-gray-500 hover:text-gray-700'
-                }`}
-            >
-              <div className="flex items-center space-x-2">
-                <Award size={18} />
-                <span>Marks Card</span>
-              </div>
-              {activeTab === 'marksCard' && (
-                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-amber-600"></div>
-              )}
-            </button>
-          </nav>
+                      </nav>
         </div>
       </div>
 
-      {/* Main Content - FIXED conditional rendering */}
+      {/* Main Content */}
       <div className="p-6">
         {activeTab === 'marksCard' ? (
           <MarksCard
             students={students}
             onUpdateStudent={handleUpdateStudent}
+            schoolInfo={schoolInfo}
           />
-        ) :
-          activeTab === 'addStudent' ? (
-            <AddStudent
-              onAddStudent={handleAddStudent}
-              onCancel={() => setActiveTab('allStudents')}
-            />
-          ) : activeTab === 'search' ? (
-            <StudentList
-              students={filteredStudents}
-              onSelectStudent={setSelectedStudent}
-              onDeleteStudent={handleDeleteStudent}
-              onAddNew={() => setActiveTab('addStudent')}
-            />
-          ) : activeTab === 'fees' ? (
-            <FeesTab
-              students={students}
-              onUpdateStudent={handleUpdateStudent}
-            />
-          ) : activeTab === 'marks' ? (
-            <MarksTab
-              students={students}
-              onUpdateStudent={handleUpdateStudent}
-            />
-          ) : activeTab === 'assessment' ? (
-            <AssessmentTab
-              students={students}
-              onUpdateStudent={handleUpdateStudent}
-            />
-          ) : activeTab === 'teachers' ? ( // Fixed condition
-            <TeachersAssessment
-              students={students}
-              onUpdateStudent={handleUpdateStudent}
-            />
-          ) : activeTab === 'hallticket' ? ( // Added hallticket condition
-            <HallTicket />
-          ) : (
-            <AllStudents
-              students={students}
-              onViewDetails={setSelectedStudent}
-              onDelete={handleDeleteStudent}
-              onUpdateStudent={handleUpdateStudent}
-              onRefresh={refreshStudents}
-              isLoading={isLoading}
-            />
-          )}
+        ) : activeTab === 'addStudent' ? (
+          <AddStudent
+            onAddStudent={handleAddStudent}
+            onCancel={() => setActiveTab('allStudents')}
+          />
+        ) : activeTab === 'search' ? (
+          <StudentList
+            students={filteredStudents}
+            onSelectStudent={setSelectedStudent}
+            onDeleteStudent={handleDeleteStudent}
+            onAddNew={() => setActiveTab('addStudent')}
+          />
+        ) : activeTab === 'fees' ? (
+          <FeesTab
+            students={students}
+            onUpdateStudent={handleUpdateStudent}
+          />
+        ) : activeTab === 'marks' ? (
+          <MarksTab
+            students={students}
+            onUpdateStudent={handleUpdateStudent}
+          />
+        ) : activeTab === 'assessment' ? (
+          <AssessmentTab
+            students={students}
+            onUpdateStudent={handleUpdateStudent}
+          />
+        ) : activeTab === 'teachers' ? (
+          <TeachersAssessment
+            students={students}
+            onUpdateStudent={handleUpdateStudent}
+          />
+        ) : activeTab === 'hallticket' ? (
+          <HallTicket 
+            students={students} 
+            onUpdateStudent={handleUpdateStudent}
+            schoolInfo={schoolInfo}
+          />
+        ) : (
+          <AllStudents
+            students={students}
+            onViewDetails={setSelectedStudent}
+            onDelete={handleDeleteStudent}
+            onUpdateStudent={handleUpdateStudent}
+            onRefresh={refreshStudents}
+            isLoading={isLoading}
+          />
+        )}
       </div>
+
+      {/* School Info Edit Modal */}
+      {isSchoolInfoModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b px-6 py-4 flex justify-between items-center">
+              <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                <Building size={24} /> School Information
+              </h3>
+              <button 
+                onClick={closeSchoolInfoModal} 
+                className="text-gray-500 hover:text-gray-700 transition"
+              >
+                <X size={24} />
+              </button>
+            </div>
+            
+            <div className="p-6">
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    School Name *
+                  </label>
+                  <input 
+                    type="text" 
+                    value={editingSchoolInfo.schoolName} 
+                    onChange={(e) => handleSchoolInfoChange('schoolName', e.target.value)} 
+                    placeholder="Enter school name" 
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition" 
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    School Address
+                  </label>
+                  <input 
+                    type="text" 
+                    value={editingSchoolInfo.schoolAddress} 
+                    onChange={(e) => handleSchoolInfoChange('schoolAddress', e.target.value)} 
+                    placeholder="Enter school address" 
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition" 
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    School Affiliation
+                  </label>
+                  <input 
+                    type="text" 
+                    value={editingSchoolInfo.schoolAffiliation} 
+                    onChange={(e) => handleSchoolInfoChange('schoolAffiliation', e.target.value)} 
+                    placeholder="e.g., Affiliated to CBSE" 
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition" 
+                  />
+                </div>
+              </div>
+
+              <div className="mt-6 flex justify-end space-x-3 pt-4 border-t">
+                <button 
+                  onClick={closeSchoolInfoModal} 
+                  className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={handleSaveSchoolInfo} 
+                  disabled={isSavingSchoolInfo}
+                  className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center space-x-2 disabled:opacity-50 transition"
+                >
+                  {isSavingSchoolInfo ? (
+                    <>
+                      <Loader className="animate-spin" size={18} />
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save size={18} />
+                      <span>Save School Info</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Add some CSS for highlighting new students */}
       <style jsx>{`
