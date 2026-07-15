@@ -101,8 +101,7 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
         const basic = student.basicInfo || {};
         return (
           basic.name?.toLowerCase().includes(term) ||
-          basic.admissionNo?.toLowerCase().includes(term) ||
-          basic.fatherName?.toLowerCase().includes(term)
+          basic.rollNumber?.toLowerCase().includes(term)
         );
       });
     }
@@ -153,6 +152,17 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
     if (percentage >= 50) return 'C';
     if (percentage >= 40) return 'D';
     if (percentage > 0) return 'F';
+    return 'N/A';
+  };
+
+  // Get roll number from student
+  const getRollNumber = (student) => {
+    if (student.basicInfo?.rollNumber) {
+      return student.basicInfo.rollNumber;
+    }
+    if (student.studentId) {
+      return `ROLL${student.studentId.slice(-6)}`;
+    }
     return 'N/A';
   };
 
@@ -220,13 +230,14 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
     };
   };
 
-  // Generate Marks Card HTML with professional design
+  // Generate Marks Card HTML with professional layout
   const getMarksCardHTML = (student) => {
     if (!student) return '';
     
     const basicInfo = student.basicInfo || {};
     const exams = student.marks?.exams || [];
     const performance = getStudentPerformance(student);
+    const rollNumber = getRollNumber(student);
     
     const escapeHtml = (text) => {
       if (!text) return '';
@@ -242,7 +253,7 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
       <!DOCTYPE html>
       <html>
       <head>
-        <title>Marks Card - ${escapeHtml(basicInfo.name || 'Student')}</title>
+        <title>Performance Report - ${escapeHtml(basicInfo.name || 'Student')}</title>
         <style>
           * { margin: 0; padding: 0; box-sizing: border-box; }
           
@@ -250,7 +261,7 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
             font-family: 'Georgia', 'Times New Roman', serif;
             margin: 0; 
             padding: 20px; 
-            background: #f5f5f5;
+            background: #f0f2f5;
             display: flex;
             justify-content: center;
             align-items: center;
@@ -261,22 +272,25 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
             max-width: 1000px;
             width: 100%;
             background: #ffffff;
-            border: 3px solid #1a1a1a;
-            padding: 45px 50px 40px 50px;
+            border: 2px solid #1a2a3a;
+            padding: 0;
             position: relative;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            box-shadow: 0 8px 40px rgba(26, 42, 58, 0.12);
           }
 
-          /* Decorative border */
+          .marks-card-inner {
+            padding: 40px 45px 35px 45px;
+          }
+
+          /* Decorative top border */
           .marks-card::before {
             content: '';
             position: absolute;
-            top: 8px;
-            left: 8px;
-            right: 8px;
-            bottom: 8px;
-            border: 1px solid #1a1a1a;
-            pointer-events: none;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: #1a2a3a;
           }
 
           /* School Header */
@@ -284,25 +298,25 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
             display: flex;
             align-items: center;
             justify-content: center;
-            padding-bottom: 20px;
-            border-bottom: 3px double #1a1a1a;
-            margin-bottom: 25px;
-            gap: 25px;
+            padding-bottom: 18px;
+            border-bottom: 2px solid #1a2a3a;
+            margin-bottom: 18px;
+            gap: 18px;
           }
 
           .school-logo {
-            width: 90px;
-            height: 90px;
-            border: 2px solid #1a1a1a;
+            width: 75px;
+            height: 75px;
+            border: 2px solid #1a2a3a;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 42px;
-            font-weight: bold;
-            color: #1a1a1a;
+            font-size: 30px;
+            font-weight: 700;
+            color: #1a2a3a;
             flex-shrink: 0;
-            background: #fafafa;
+            background: #f8f9fa;
             font-family: 'Georgia', serif;
           }
 
@@ -312,71 +326,66 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
           }
 
           .school-name {
-            font-size: 28px;
+            font-size: 26px;
             font-weight: 700;
-            color: #1a1a1a;
-            letter-spacing: 2px;
+            color: #1a2a3a;
+            letter-spacing: 1.5px;
             text-transform: uppercase;
             font-family: 'Georgia', serif;
           }
 
           .school-details {
             font-size: 13px;
-            color: #444444;
-            margin-top: 6px;
+            color: #4a5a6a;
+            margin-top: 5px;
             line-height: 1.6;
           }
 
           .school-details .detail-item {
             display: inline-block;
-            margin: 0 10px;
+            margin: 0 8px;
           }
 
           .school-details .separator {
-            color: #888;
-            margin: 0 5px;
+            color: #8a9aaa;
+            margin: 0 4px;
           }
 
+          /* Title Section */
           .title-section {
-            background: #1a1a1a;
+            background: #1a2a3a;
             color: #ffffff;
-            padding: 12px 20px;
-            margin: 20px 0 25px 0;
+            padding: 10px 20px;
+            margin: 14px 0 22px 0;
             text-align: center;
-            position: relative;
+            letter-spacing: 2px;
           }
 
           .title-section h1 {
-            font-size: 24px;
+            font-size: 22px;
             font-weight: 700;
-            letter-spacing: 4px;
+            letter-spacing: 3px;
             text-transform: uppercase;
             margin: 0;
             font-family: 'Georgia', serif;
           }
 
-          .title-section .sub-title {
-            font-size: 13px;
-            opacity: 0.8;
-            margin-top: 3px;
-            letter-spacing: 1px;
-          }
-
+          /* Student Info */
           .student-info {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 8px 35px;
-            background: #f9f9f9;
-            padding: 18px 25px;
-            border: 1px solid #d0d0d0;
-            margin-bottom: 28px;
+            gap: 6px 30px;
+            background: #f8f9fa;
+            padding: 16px 22px;
+            border-left: 4px solid #1a2a3a;
+            margin-bottom: 26px;
           }
 
           .info-item {
             display: flex;
             align-items: center;
             padding: 4px 0;
-            border-bottom: 1px dotted #e0e0e0;
+            border-bottom: 1px dotted #e0e4e8;
           }
 
           .info-item:last-child {
@@ -385,109 +394,149 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
 
           .info-label {
             font-weight: 600;
-            color: #1a1a1a;
+            color: #1a2a3a;
             min-width: 120px;
             font-size: 13px;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.3px;
           }
 
           .info-value {
-            color: #1a1a1a;
+            color: #1a2a3a;
             font-size: 13px;
             font-weight: 500;
           }
 
-          .performance-summary {
+          /* Performance Stats */
+          .performance-stats {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
-            gap: 15px;
-            margin-bottom: 32px;
+            gap: 14px;
+            margin-bottom: 30px;
           }
 
-          .perf-card {
-            background: #f9f9f9;
-            border: 1px solid #d0d0d0;
-            padding: 14px 10px;
+          .stat-card {
+            background: #f8f9fa;
+            border: 1px solid #e0e4e8;
+            padding: 14px 12px;
             text-align: center;
-            transition: all 0.3s ease;
           }
 
-          .perf-card .label {
+          .stat-card .stat-label {
             font-size: 11px;
-            color: #555555;
+            color: #4a5a6a;
             font-weight: 600;
             text-transform: uppercase;
-            letter-spacing: 0.8px;
+            letter-spacing: 0.5px;
           }
 
-          .perf-card .value {
+          .stat-card .stat-value {
             font-size: 24px;
             font-weight: 700;
-            color: #1a1a1a;
-            margin-top: 5px;
+            color: #1a2a3a;
+            margin-top: 4px;
           }
 
-          .perf-card .value.high {
-            color: #1a7a3a;
-          }
-
-          .perf-card .value.medium {
-            color: #b8860b;
-          }
-
-          .perf-card .value.low {
-            color: #b22222;
-          }
-
+          /* Exam Section */
           .exam-section {
-            margin-top: 28px;
+            margin-top: 26px;
           }
 
-          .exam-section h3 {
+          .exam-section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #1a2a3a;
+          }
+
+          .exam-section-header h3 {
             font-size: 17px;
             font-weight: 700;
-            color: #1a1a1a;
-            margin-bottom: 18px;
-            padding-bottom: 10px;
-            border-bottom: 2px solid #1a1a1a;
+            color: #1a2a3a;
             font-family: 'Georgia', serif;
-            letter-spacing: 1px;
+            letter-spacing: 0.5px;
           }
 
-          .exam-block {
-            background: #f9f9f9;
-            border: 1px solid #d0d0d0;
-            margin-bottom: 18px;
+          .exam-section-header .badge {
+            font-size: 12px;
+            color: #4a5a6a;
+            background: #f0f2f5;
+            padding: 4px 14px;
+            border-radius: 20px;
+            font-weight: 500;
+          }
+
+          .exam-card {
+            background: #f8f9fa;
+            border: 1px solid #e0e4e8;
+            margin-bottom: 16px;
             overflow: hidden;
           }
 
-          .exam-header {
+          .exam-card-header {
             background: #ffffff;
             padding: 12px 20px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            border-bottom: 1px solid #d0d0d0;
+            border-bottom: 1px solid #e0e4e8;
+            flex-wrap: wrap;
+            gap: 8px;
+          }
+
+          .exam-title-group {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+          }
+
+          .exam-number {
+            background: #1a2a3a;
+            color: #ffffff;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 700;
+            font-family: 'Georgia', serif;
           }
 
           .exam-name {
             font-weight: 600;
             font-size: 15px;
-            color: #1a1a1a;
+            color: #1a2a3a;
             font-family: 'Georgia', serif;
           }
 
-          .exam-meta {
+          .exam-date {
             font-size: 12px;
-            color: #555555;
+            color: #4a5a6a;
           }
 
-          .exam-grade {
+          .exam-score {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+          }
+
+          .exam-percentage {
             font-weight: 700;
-            font-size: 14px;
-            color: #1a1a1a;
-            padding: 4px 14px;
-            border: 1px solid #1a1a1a;
+            font-size: 18px;
+            color: #1a2a3a;
+            font-family: 'Georgia', serif;
+          }
+
+          .exam-grade-badge {
+            font-weight: 700;
+            font-size: 13px;
+            padding: 4px 16px;
+            border-radius: 20px;
+            background: #1a2a3a;
+            color: #ffffff;
           }
 
           .subjects-table {
@@ -497,20 +546,20 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
           }
 
           .subjects-table th {
-            background: #1a1a1a;
+            background: #1a2a3a;
             color: #ffffff;
             padding: 10px 14px;
             text-align: center;
             font-weight: 600;
             font-size: 12px;
             text-transform: uppercase;
-            letter-spacing: 0.8px;
+            letter-spacing: 0.5px;
           }
 
           .subjects-table td {
             padding: 9px 14px;
             text-align: center;
-            border-bottom: 1px solid #e0e0e0;
+            border-bottom: 1px solid #e0e4e8;
           }
 
           .subjects-table tr:last-child td {
@@ -520,27 +569,31 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
           .subjects-table .subject-name {
             text-align: left;
             font-weight: 500;
-            color: #1a1a1a;
+            color: #1a2a3a;
             padding-left: 20px;
           }
 
           .subjects-table .total-row {
-            background: #e8e8e8;
+            background: #e8ecf0;
             font-weight: 700;
           }
 
           .subjects-table .total-row td {
-            border-top: 2px solid #1a1a1a;
+            border-top: 2px solid #1a2a3a;
             padding: 12px 14px;
           }
 
-          .grade-text {
+          .subject-grade {
             font-weight: 600;
-            color: #1a1a1a;
+            padding: 3px 12px;
+            border-radius: 12px;
+            font-size: 11px;
+            background: #f0f2f5;
+            color: #1a2a3a;
           }
 
           .no-data {
-            color: #888888;
+            color: #7a8a9a;
             text-align: center;
             padding: 35px;
             font-style: italic;
@@ -548,12 +601,12 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
 
           /* Signature Section */
           .signature-section {
-            margin-top: 45px;
-            padding-top: 25px;
-            border-top: 3px double #1a1a1a;
+            margin-top: 38px;
+            padding-top: 22px;
+            border-top: 2px solid #1a2a3a;
             display: grid;
             grid-template-columns: repeat(3, 1fr);
-            gap: 25px;
+            gap: 20px;
           }
 
           .signature-block {
@@ -561,9 +614,9 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
           }
 
           .signature-line {
-            margin-top: 45px;
-            border-top: 1px solid #1a1a1a;
-            width: 75%;
+            margin-top: 38px;
+            border-top: 1px solid #1a2a3a;
+            width: 70%;
             margin-left: auto;
             margin-right: auto;
           }
@@ -571,7 +624,7 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
           .signature-label {
             font-size: 12px;
             font-weight: 600;
-            color: #1a1a1a;
+            color: #1a2a3a;
             margin-top: 8px;
             letter-spacing: 0.5px;
             text-transform: uppercase;
@@ -579,17 +632,17 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
 
           .signature-name {
             font-size: 11px;
-            color: #555555;
+            color: #4a5a6a;
             margin-top: 3px;
           }
 
           .footer {
-            margin-top: 35px;
-            padding-top: 18px;
-            border-top: 1px solid #d0d0d0;
+            margin-top: 30px;
+            padding-top: 14px;
+            border-top: 1px solid #e0e4e8;
             text-align: center;
             font-size: 11px;
-            color: #888888;
+            color: #7a8a9a;
             letter-spacing: 0.5px;
           }
 
@@ -598,175 +651,191 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%) rotate(-30deg);
-            font-size: 90px;
+            font-size: 80px;
             font-weight: 900;
-            color: rgba(0, 0, 0, 0.03);
+            color: rgba(26, 42, 58, 0.03);
             pointer-events: none;
-            letter-spacing: 12px;
+            letter-spacing: 10px;
             white-space: nowrap;
             font-family: 'Georgia', serif;
           }
 
           @media print {
             body { background: #ffffff; padding: 0; }
-            .marks-card { border: 2px solid #1a1a1a; box-shadow: none; }
+            .marks-card { border: 2px solid #1a2a3a; box-shadow: none; }
           }
 
           @media (max-width: 768px) {
-            .marks-card { padding: 25px 20px; }
-            .school-header { flex-direction: column; gap: 15px; }
-            .student-info { grid-template-columns: 1fr; gap: 5px; }
-            .performance-summary { grid-template-columns: 1fr 1fr; }
-            .signature-section { grid-template-columns: 1fr; }
-            .exam-header { flex-direction: column; gap: 8px; align-items: flex-start; }
-            .school-details .detail-item { display: block; margin: 3px 0; }
+            .marks-card-inner { padding: 20px 18px; }
+            .school-header { flex-direction: column; gap: 12px; }
+            .student-info { grid-template-columns: 1fr; gap: 4px; }
+            .performance-stats { grid-template-columns: 1fr 1fr; gap: 10px; }
+            .signature-section { grid-template-columns: 1fr; gap: 16px; }
+            .exam-card-header { flex-direction: column; align-items: flex-start; }
+            .exam-score { width: 100%; justify-content: space-between; }
+            .school-details .detail-item { display: block; margin: 2px 0; }
             .school-details .separator { display: none; }
+          }
+
+          @media (max-width: 480px) {
+            .performance-stats { grid-template-columns: 1fr 1fr; gap: 8px; }
+            .stat-card { padding: 10px 8px; }
+            .stat-card .stat-value { font-size: 18px; }
+            .subjects-table { font-size: 11px; }
+            .subjects-table th, .subjects-table td { padding: 6px 8px; }
           }
         </style>
       </head>
       <body>
         <div class="marks-card">
-          <div class="watermark">MARKS CARD</div>
+          <div class="marks-card-inner">
+            <div class="watermark">PERFORMANCE REPORT</div>
 
-          <!-- School Header with Logo -->
-          <div class="school-header">
-            
-            <div class="school-info">
-              <div class="school-name">${escapeHtml(schoolName)}</div>
-              <div class="school-details">
-                <span class="detail-item">
-                  <span>Phone :</span> ${escapeHtml(schoolInfo.schoolPhone || '')}
-                </span>
-                <span class="separator">|</span>
-                <span class="detail-item">
-                  <span>Email :</span> ${escapeHtml(schoolInfo.schoolEmail || '')}
-                </span>
-                <span class="separator">|</span>
-                <span class="detail-item">
-                  <span>Address :</span> ${escapeHtml(schoolInfo.schoolAddress || '')}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div class="title-section">
-            <h1>Academic Marks Card</h1>
-            <div class="sub-title">Performance Report - ${escapeHtml(new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }))}</div>
-          </div>
-
-          <div class="student-info">
-            <div class="info-item">
-              <span class="info-label">Student Name :</span>
-              <span class="info-value">${escapeHtml(basicInfo.name || 'N/A')}</span>
-            </div>
-            <div class="info-item">
-              <span class="info-label">Admission Number :</span>
-              <span class="info-value">${escapeHtml(basicInfo.admissionNo || 'N/A')}</span>
-            </div>
-            <div class="info-item">
-              <span class="info-label">Father's Name :</span>
-              <span class="info-value">${escapeHtml(basicInfo.fatherName || 'N/A')}</span>
-            </div>
-            <div class="info-item">
-              <span class="info-label">Class and Section :</span>
-              <span class="info-value">${escapeHtml(basicInfo.grade || 'N/A')} - ${escapeHtml(basicInfo.section || 'N/A')}</span>
-            </div>
-          </div>
-
-          ${hasExams ? `
-          <div class="performance-summary">
-            <div class="perf-card">
-              <div class="label">Total Examinations</div>
-              <div class="value">${performance.totalExams}</div>
-            </div>
-            <div class="perf-card">
-              <div class="label">Average Performance</div>
-              <div class="value ${performance.averagePercentage >= 75 ? 'high' : performance.averagePercentage >= 50 ? 'medium' : 'low'}">${performance.averagePercentage}%</div>
-            </div>
-            <div class="perf-card">
-              <div class="label">Overall Grade</div>
-              <div class="value">${performance.overallGrade}</div>
-            </div>
-            <div class="perf-card">
-              <div class="label">Total Marks Obtained</div>
-              <div class="value">${performance.totalMarks}</div>
-            </div>
-          </div>
-          ` : ''}
-
-          <div class="exam-section">
-            <h3>Examination Details</h3>
-            ${hasExams ? exams.map((exam, index) => `
-              <div class="exam-block">
-                <div class="exam-header">
-                  <div>
-                    <div class="exam-name">${escapeHtml(exam.examType || 'Examination ' + (index + 1))}</div>
-                    <div class="exam-meta">${exam.examDate ? escapeHtml(exam.examDate) : ''}</div>
-                  </div>
-                  <div>
-                    <span class="exam-meta" style="margin-right:15px;">${exam.percentage || 0}%</span>
-                    <span class="exam-grade">${escapeHtml(exam.overallGrade || 'N/A')}</span>
-                  </div>
+            <!-- School Header -->
+            <div class="school-header">
+              <div class="school-info">
+                <div class="school-name">${escapeHtml(schoolName)}</div>
+                <div class="school-details">
+                  <span class="detail-item">Phone : ${escapeHtml(schoolInfo.schoolPhone || '')}</span>
+                  <span class="separator">|</span>
+                  <span class="detail-item">Email : ${escapeHtml(schoolInfo.schoolEmail || '')}</span>
+                  <span class="separator">|</span>
+                  <span class="detail-item">Address : ${escapeHtml(schoolInfo.schoolAddress || '')}</span>
                 </div>
-                
-                ${(exam.subjects || []).length > 0 ? `
-                <table class="subjects-table">
-                  <thead>
-                    <tr>
-                      <th style="text-align:left;padding-left:20px;">Subject</th>
-                      <th>Marks Obtained</th>
-                      <th>Total Marks</th>
-                      <th>Percentage</th>
-                      <th>Grade</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    ${exam.subjects.map(subject => `
-                      <tr>
-                        <td class="subject-name">${escapeHtml(subject.name || 'N/A')}</td>
-                        <td>${subject.marks || 0}</td>
-                        <td>${subject.total || 0}</td>
-                        <td>${subject.total > 0 ? Math.round((subject.marks / subject.total) * 100) : 0}%</td>
-                        <td><span class="grade-text">${escapeHtml(subject.grade || 'N/A')}</span></td>
-                      </tr>
-                    `).join('')}
-                    <tr class="total-row">
-                      <td style="text-align:right;padding-right:20px;">Total</td>
-                      <td>${exam.subjects.reduce((sum, s) => sum + (s.marks || 0), 0)}</td>
-                      <td>${exam.subjects.reduce((sum, s) => sum + (s.total || 0), 0)}</td>
-                      <td>${exam.percentage || 0}%</td>
-                      <td><span class="grade-text">${escapeHtml(exam.overallGrade || 'N/A')}</span></td>
-                    </tr>
-                  </tbody>
-                </table>
-                ` : '<div class="no-data">No subject records found for this examination</div>'}
               </div>
-            `).join('') : `
-              <div class="no-data">No examination records found for this student</div>
-            `}
-          </div>
+            </div>
 
-          <!-- Signature Section -->
-          <div class="signature-section">
-            <div class="signature-block">
-              <div class="signature-line"></div>
-              <div class="signature-label">Class Teacher</div>
-             
+            <div class="title-section">
+              <h1>Performance Report</h1>
             </div>
-            <div class="signature-block">
-              <div class="signature-line"></div>
-              <div class="signature-label">Parent/Guardian</div>
-             
-            </div>
-            <div class="signature-block">
-              <div class="signature-line"></div>
-              <div class="signature-label">Principal</div>
-              
-            </div>
-          </div>
 
-          <div class="footer">
-            Generated on ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })} 
+            <!-- Student Info -->
+            <div class="student-info">
+              <div class="info-item">
+                <span class="info-label">Student Name :</span>
+                <span class="info-value">${escapeHtml(basicInfo.name || 'N/A')}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">Roll Number :</span>
+                <span class="info-value">${escapeHtml(rollNumber)}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">Father's Name :</span>
+                <span class="info-value">${escapeHtml(basicInfo.fatherName || 'N/A')}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">Class & Section :</span>
+                <span class="info-value">${escapeHtml(basicInfo.grade || 'N/A')} - ${escapeHtml(basicInfo.section || 'N/A')}</span>
+              </div>
+            </div>
+
+            ${hasExams ? `
+            <!-- Performance Stats -->
+            <div class="performance-stats">
+              <div class="stat-card">
+                <div class="stat-label">Total Examinations</div>
+                <div class="stat-value">${performance.totalExams}</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-label">Average Performance</div>
+                <div class="stat-value">${performance.averagePercentage}%</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-label">Overall Grade</div>
+                <div class="stat-value">${performance.overallGrade}</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-label">Total Marks Obtained</div>
+                <div class="stat-value">${performance.totalMarks}</div>
+              </div>
+            </div>
+            ` : ''}
+
+            <!-- Exam Section -->
+            <div class="exam-section">
+              <div class="exam-section-header">
+                <h3>Examination Details</h3>
+                ${hasExams ? `<span class="badge">${exams.length} Exams</span>` : ''}
+              </div>
+
+              ${hasExams ? exams.map((exam, index) => {
+                const examPercentage = exam.percentage || 0;
+                return `
+                <div class="exam-card">
+                  <div class="exam-card-header">
+                    <div class="exam-title-group">
+                      <div class="exam-number">${index + 1}</div>
+                      <div>
+                        <div class="exam-name">${escapeHtml(exam.examType || 'Examination ' + (index + 1))}</div>
+                        <div class="exam-date">${exam.examDate ? escapeHtml(exam.examDate) : ''}</div>
+                      </div>
+                    </div>
+                    <div class="exam-score">
+                      <span class="exam-percentage">${examPercentage}%</span>
+                      <span class="exam-grade-badge">${escapeHtml(exam.overallGrade || 'N/A')}</span>
+                    </div>
+                  </div>
+                  
+                  ${(exam.subjects || []).length > 0 ? `
+                  <table class="subjects-table">
+                    <thead>
+                      <tr>
+                        <th style="text-align:left;padding-left:20px;">Subject</th>
+                        <th>Marks Obtained</th>
+                        <th>Total Marks</th>
+                        <th>Percentage</th>
+                        <th>Grade</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${exam.subjects.map(subject => {
+                        const subPercentage = subject.total > 0 ? Math.round((subject.marks / subject.total) * 100) : 0;
+                        return `
+                        <tr>
+                          <td class="subject-name">${escapeHtml(subject.name || 'N/A')}</td>
+                          <td>${subject.marks || 0}</td>
+                          <td>${subject.total || 0}</td>
+                          <td>${subPercentage}%</td>
+                          <td><span class="subject-grade">${escapeHtml(subject.grade || 'N/A')}</span></td>
+                        </tr>
+                        `;
+                      }).join('')}
+                      <tr class="total-row">
+                        <td style="text-align:right;padding-right:20px;">Total</td>
+                        <td>${exam.subjects.reduce((sum, s) => sum + (s.marks || 0), 0)}</td>
+                        <td>${exam.subjects.reduce((sum, s) => sum + (s.total || 0), 0)}</td>
+                        <td>${examPercentage}%</td>
+                        <td><span class="subject-grade">${escapeHtml(exam.overallGrade || 'N/A')}</span></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  ` : '<div class="no-data">No subject records found for this examination</div>'}
+                </div>
+                `;
+              }).join('') : `
+                <div class="no-data">No examination records found for this student</div>
+              `}
+            </div>
+
+            <!-- Signature Section -->
+            <div class="signature-section">
+              <div class="signature-block">
+                <div class="signature-line"></div>
+                <div class="signature-label">Class Teacher</div>
+              </div>
+              <div class="signature-block">
+                <div class="signature-line"></div>
+                <div class="signature-label">Parent/Guardian</div>
+              </div>
+              <div class="signature-block">
+                <div class="signature-line"></div>
+                <div class="signature-label">Principal</div>
+              </div>
+            </div>
+
+            <div class="footer">
+              Generated on ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+            </div>
           </div>
         </div>
       </body>
@@ -786,7 +855,7 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
       
       const opt = {
         margin: [10, 10, 10, 10],
-        filename: `MarksCard_${student.basicInfo?.name || 'Student'}.pdf`,
+        filename: `PerformanceReport_${student.basicInfo?.name || 'Student'}.pdf`,
         image: { type: 'jpeg', quality: 0.98 },
         html2canvas: { 
           scale: 2, 
@@ -849,8 +918,7 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
       const basic = student.basicInfo || {};
       return (
         basic.name?.toLowerCase().includes(term) ||
-        basic.admissionNo?.toLowerCase().includes(term) ||
-        basic.fatherName?.toLowerCase().includes(term)
+        basic.rollNumber?.toLowerCase().includes(term)
       );
     });
   }, [downloadStudents, downloadSearchTerm]);
@@ -979,8 +1047,7 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
                     <tr>
                       <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">No.</th>
                       <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Student Name</th>
-                      <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Admission No</th>
-                      <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Father's Name</th>
+                      <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Roll Number</th>
                       {viewStudents[0]?.marks?.exams?.length > 0 && 
                         viewStudents[0].marks.exams[viewStudents[0].marks.exams.length - 1].subjects.map((subject, idx) => (
                           <th key={idx} className="px-4 py-3 text-center text-sm font-semibold text-gray-700">
@@ -1003,13 +1070,13 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
                       const totalMarks = subjects.reduce((sum, s) => sum + (s.marks || 0), 0);
                       const totalPossible = subjects.reduce((sum, s) => sum + (s.total || 0), 0);
                       const percentage = totalPossible > 0 ? (totalMarks / totalPossible) * 100 : 0;
+                      const rollNumber = getRollNumber(student);
                       
                       return (
                         <tr key={student.studentId || studentIdx} className="border-b hover:bg-gray-50">
                           <td className="px-4 py-3 text-sm text-center">{studentIdx + 1}</td>
                           <td className="px-4 py-3 text-sm font-medium">{basicInfo.name || 'N/A'}</td>
-                          <td className="px-4 py-3 text-sm text-gray-600">{basicInfo.admissionNo || 'N/A'}</td>
-                          <td className="px-4 py-3 text-sm text-gray-600">{basicInfo.fatherName || 'N/A'}</td>
+                          <td className="px-4 py-3 text-sm text-gray-600">{rollNumber}</td>
                           {subjects.map((subject, subIdx) => (
                             <td key={subIdx} className="px-4 py-3 text-center text-sm">
                               {subject.marks || 0}
@@ -1022,13 +1089,7 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
                             {percentage.toFixed(1)}%
                           </td>
                           <td className="px-4 py-3 text-center">
-                            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                              percentage >= 90 ? 'bg-green-100 text-green-800' :
-                              percentage >= 75 ? 'bg-blue-100 text-blue-800' :
-                              percentage >= 60 ? 'bg-yellow-100 text-yellow-800' :
-                              percentage >= 40 ? 'bg-orange-100 text-orange-800' :
-                              'bg-red-100 text-red-800'
-                            }`}>
+                            <span className="px-3 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-700">
                               {getOverallGrade(percentage)}
                             </span>
                           </td>
@@ -1109,7 +1170,7 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
                 <input
                   type="text"
-                  placeholder="Search by name or admission no..."
+                  placeholder="Search by name or roll number..."
                   value={downloadSearchTerm}
                   onChange={(e) => setDownloadSearchTerm(e.target.value)}
                   className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500"
@@ -1174,8 +1235,7 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
                     <tr>
                       <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">No.</th>
                       <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Student Name</th>
-                      <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Admission No</th>
-                      <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Father's Name</th>
+                      <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Roll Number</th>
                       {filteredDownloadStudents[0]?.marks?.exams?.length > 0 && 
                         filteredDownloadStudents[0].marks.exams[filteredDownloadStudents[0].marks.exams.length - 1].subjects.map((subject, idx) => (
                           <th key={idx} className="px-4 py-3 text-center text-sm font-semibold text-gray-700">
@@ -1198,13 +1258,13 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
                       const totalMarks = subjects.reduce((sum, s) => sum + (s.marks || 0), 0);
                       const totalPossible = subjects.reduce((sum, s) => sum + (s.total || 0), 0);
                       const percentage = totalPossible > 0 ? (totalMarks / totalPossible) * 100 : 0;
+                      const rollNumber = getRollNumber(student);
                       
                       return (
                         <tr key={student.studentId || studentIdx} className="border-b hover:bg-gray-50">
                           <td className="px-4 py-3 text-sm text-center">{studentIdx + 1}</td>
                           <td className="px-4 py-3 text-sm font-medium">{basicInfo.name || 'N/A'}</td>
-                          <td className="px-4 py-3 text-sm text-gray-600">{basicInfo.admissionNo || 'N/A'}</td>
-                          <td className="px-4 py-3 text-sm text-gray-600">{basicInfo.fatherName || 'N/A'}</td>
+                          <td className="px-4 py-3 text-sm text-gray-600">{rollNumber}</td>
                           {subjects.map((subject, subIdx) => (
                             <td key={subIdx} className="px-4 py-3 text-center text-sm">
                               {subject.marks || 0}
@@ -1217,13 +1277,7 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
                             {percentage.toFixed(1)}%
                           </td>
                           <td className="px-4 py-3 text-center">
-                            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                              percentage >= 90 ? 'bg-green-100 text-green-800' :
-                              percentage >= 75 ? 'bg-blue-100 text-blue-800' :
-                              percentage >= 60 ? 'bg-yellow-100 text-yellow-800' :
-                              percentage >= 40 ? 'bg-orange-100 text-orange-800' :
-                              'bg-red-100 text-red-800'
-                            }`}>
+                            <span className="px-3 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-700">
                               {getOverallGrade(percentage)}
                             </span>
                           </td>
@@ -1261,7 +1315,7 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
             <div className="sticky top-0 bg-white border-b px-6 py-4 flex justify-between items-center z-10 rounded-t-xl">
               <div>
                 <h3 className="text-xl font-bold text-gray-800">
-                  Marks Card Preview
+                  Performance Report Preview
                 </h3>
                 <p className="text-sm text-gray-600">
                   {selectedStudent.basicInfo?.name || 'Student'}
