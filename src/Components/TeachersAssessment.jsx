@@ -339,7 +339,7 @@ const TeachersAssessment = () => {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      {/* <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
@@ -376,7 +376,7 @@ const TeachersAssessment = () => {
             <Award size={32} className="text-amber-400" />
           </div>
         </div>
-      </div>
+      </div> */}
 
       {/* Filters */}
       <div className="bg-white rounded-xl border border-gray-200 p-5">

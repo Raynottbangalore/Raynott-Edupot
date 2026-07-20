@@ -51,29 +51,278 @@ class StudentApi {
   /**
    * Get all students for the current school
    */
-  static async getAllStudents() {
-    try {
-      const headers = await this.getAuthHeader();
-      const response = await fetch(`${BASE_URL}/students`, {
-        method: 'GET',
-        headers,
+  // src/service/StudentApi.js
+static async getAllStudents() {
+  try {
+    const headers = await this.getAuthHeader();
+    const response = await fetch(`${BASE_URL}/students`, {
+      method: 'GET',
+      headers,
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || !data.success) {
+      throw new Error(data.error || 'Failed to load students');
+    }
+
+    return {
+      success: true,
+      students: data.students || [],
+    };
+  } catch (error) {
+    console.error('Get all students error:', error);
+    return { success: false, error: error.message || 'Could not fetch students' };
+  }
+}
+
+
+
+/**
+ * Get all students with their class exam marks merged - WITH FORCE REFRESH
+ */
+// src/service/StudentApi.js - Fix the getAllStudentsWithClassMarks method
+
+/**
+ * Get all students with their class exam marks merged - WITH FORCE REFRESH
+ */
+static async getAllStudentsWithClassMarks(forceRefresh = true) {
+  try {
+    console.log('🔍 Fetching all students with class marks...', forceRefresh ? '(FORCE REFRESH)' : '');
+    
+    // Add cache-busting parameter
+    const cacheBuster = forceRefresh ? `?_=${Date.now()}` : '';
+    
+    // First get all students with cache-busting
+    const studentsResult = await this.getAllStudents(forceRefresh);
+    console.log('📊 Students API response:', studentsResult);
+    
+    if (!studentsResult.success) {
+      console.error('❌ Failed to get students:', studentsResult.error);
+      return studentsResult;
+    }
+
+    const students = studentsResult.students || [];
+    console.log(`👥 Found ${students.length} students`);
+    
+    if (students.length === 0) {
+      return { success: true, students: [] };
+    }
+
+    // Get unique classes from students
+    const classMap = new Map();
+    students.forEach(student => {
+      const grade = student.basicInfo?.grade;
+      const section = student.basicInfo?.section;
+      if (grade && section) {
+        const key = `${grade}-${section}`;
+        if (!classMap.has(key)) {
+          classMap.set(key, { grade, section, studentIds: [] });
+        }
+        classMap.get(key).studentIds.push(student.studentId);
+      }
+    });
+
+    console.log('📚 Unique classes found:', Array.from(classMap.keys()));
+
+    // Fetch exams for each class with cache-busting
+    const examMap = new Map();
+    for (const [key, classData] of classMap) {
+      try {
+        console.log(`🔍 Fetching exams for class ${key}...`);
+        const examsResult = await this.getClassExams(classData.grade, classData.section, forceRefresh);
+        console.log(`📊 Class ${key} exams response:`, examsResult);
+        
+        if (examsResult.success && examsResult.exams && examsResult.exams.length > 0) {
+          console.log(`✅ Found ${examsResult.exams.length} exams for class ${key}`);
+          // Store the exams with their full structure
+          examMap.set(key, examsResult.exams);
+        } else {
+          console.log(`⚠️ No exams found for class ${key}`);
+          examMap.set(key, []);
+        }
+      } catch (error) {
+        console.error(`❌ Error fetching exams for class ${key}:`, error);
+        examMap.set(key, []);
+      }
+    }
+
+    // Merge exam marks into students
+    const studentsWithMarks = students.map(student => {
+      const grade = student.basicInfo?.grade;
+      const section = student.basicInfo?.section;
+      const key = `${grade}-${section}`;
+      const classExams = examMap.get(key) || [];
+      
+      // Extract this student's marks from each class exam
+      const studentClassExams = classExams
+        .filter(exam => exam.marks && exam.marks[student.studentId])
+        .map(exam => {
+          const studentMarks = exam.marks[student.studentId];
+          
+          // CRITICAL FIX: Ensure subjects are properly formatted
+          let subjects = [];
+          
+          // Check if studentMarks has a marks array
+          if (studentMarks && studentMarks.marks && Array.isArray(studentMarks.marks)) {
+            // Use the marks from studentMarks.marks
+            subjects = studentMarks.marks.map(mark => ({
+              name: mark.name || 'Unknown Subject',
+              marks: mark.marks || 0,
+              total: mark.total || 0,
+              grade: mark.grade || this.calculateGrade(((mark.marks || 0) / (mark.total || 1)) * 100)
+            }));
+          } else if (exam.subjects && Array.isArray(exam.subjects)) {
+            // Fallback: use exam subjects with default values
+            subjects = exam.subjects.map(subject => ({
+              name: subject.name || 'Unknown Subject',
+              marks: 0,
+              total: subject.total || 0,
+              grade: 'N/A'
+            }));
+          }
+          
+          // Calculate total marks and percentage from subjects
+          const totalMarks = subjects.reduce((sum, s) => sum + (s.marks || 0), 0);
+          const totalPossible = subjects.reduce((sum, s) => sum + (s.total || 0), 0);
+          const percentage = totalPossible > 0 ? (totalMarks / totalPossible) * 100 : 0;
+          
+          return {
+            id: exam.id || Date.now().toString(),
+            examType: exam.examType || 'Class Exam',
+            examDate: exam.examDate || new Date().toISOString().split('T')[0],
+            subjects: subjects,
+            totalMarks: totalMarks,
+            totalPossible: totalPossible,
+            percentage: Math.round(percentage * 10) / 10,
+            overallGrade: this.calculateGrade(percentage)
+          };
+        });
+
+      // Get existing individual exams from student's marks
+      const existingExams = (student.marks?.exams || []).map(exam => {
+        // Ensure existing exams also have proper subject structure
+        if (exam.subjects && Array.isArray(exam.subjects)) {
+          return exam;
+        }
+        return {
+          ...exam,
+          subjects: exam.subjects || []
+        };
+      });
+      
+      // Combine both - class exams first, then individual exams
+      const allExams = [...studentClassExams, ...existingExams];
+      
+      // Sort by date if available
+      allExams.sort((a, b) => {
+        const dateA = a.examDate || '';
+        const dateB = b.examDate || '';
+        return dateA.localeCompare(dateB);
       });
 
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || 'Failed to load students');
-      }
-
       return {
-        success: true,
-        students: data.students || [],
+        ...student,
+        marks: {
+          ...student.marks,
+          exams: allExams
+        }
       };
-    } catch (error) {
-      console.error('Get students error:', error);
-      return { success: false, error: error.message || 'Could not fetch students' };
+    });
+
+    console.log(`✅ Final: ${studentsWithMarks.length} students with marks merged`);
+    
+    // Log first student's exam data for debugging
+    if (studentsWithMarks.length > 0) {
+      const firstStudent = studentsWithMarks[0];
+      console.log('🔍 Sample student marks structure:', {
+        name: firstStudent.basicInfo?.name,
+        totalExams: firstStudent.marks?.exams?.length || 0,
+        firstExam: firstStudent.marks?.exams?.[0] || null
+      });
     }
+    
+    return {
+      success: true,
+      students: studentsWithMarks
+    };
+  } catch (error) {
+    console.error('❌ Get all students with class marks error:', error);
+    return { success: false, error: error.message || 'Failed to load students with marks', students: [] };
   }
+}
+
+/**
+ * Get all students - WITH FORCE REFRESH
+ */
+static async getAllStudents(forceRefresh = true) {
+  try {
+    const headers = await this.getAuthHeader();
+    const cacheBuster = forceRefresh ? `?_=${Date.now()}` : '';
+    const response = await fetch(`${BASE_URL}/students${cacheBuster}`, {
+      method: 'GET',
+      headers,
+      cache: 'no-store' // Prevent caching
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || !data.success) {
+      throw new Error(data.error || 'Failed to load students');
+    }
+
+    return {
+      success: true,
+      students: data.students || [],
+    };
+  } catch (error) {
+    console.error('Get all students error:', error);
+    return { success: false, error: error.message || 'Could not fetch students' };
+  }
+}
+
+/**
+ * Get class exams - WITH FORCE REFRESH
+ */
+static async getClassExams(grade, section, forceRefresh = true) {
+  try {
+    const headers = await this.getAuthHeader();
+    const cacheBuster = forceRefresh ? `?_=${Date.now()}` : '';
+    const response = await fetch(`${BASE_URL}/class-exams/${grade}/${section}/exams${cacheBuster}`, {
+      method: 'GET',
+      headers,
+      cache: 'no-store' // Prevent caching
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok || !data.success) {
+      return { success: false, error: data.error || 'Failed to fetch class exams', exams: [] };
+    }
+    
+    return { 
+      success: true, 
+      exams: Array.isArray(data.exams) ? data.exams : [] 
+    };
+  } catch (error) {
+    console.error('Get class exams error:', error);
+    return { success: false, error: error.message, exams: [] };
+  }
+}
+
+/**
+ * Helper: Calculate grade based on percentage
+ */
+static calculateGrade(percentage) {
+  if (percentage >= 90) return 'A+';
+  if (percentage >= 80) return 'A';
+  if (percentage >= 70) return 'B+';
+  if (percentage >= 60) return 'B';
+  if (percentage >= 50) return 'C';
+  if (percentage >= 40) return 'D';
+  if (percentage > 0) return 'F';
+  return 'N/A';
+}
 
   /**
    * Get single student by ID
@@ -1128,7 +1377,6 @@ static async getSchoolInfo() {
     return { success: false, error: error.message || 'Could not fetch school info' };
   }
 }
-
 /**
  * Save school information
  * @param {Object} schoolData - { schoolName, schoolAddress, schoolAffiliation }
@@ -1268,6 +1516,173 @@ static async deleteHallTicketSettings(key) {
     return { success: false, error: error.message };
   }
 }
+
+ /**
+   * Setup class subjects (common for all exams in this class)
+   */
+  static async setupClassSubjects(grade, section, subjects) {
+    try {
+      const headers = await this.getAuthHeader();
+      const response = await fetch(`${BASE_URL}/class-exams/${grade}/${section}/subjects`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ subjects }),
+      });
+      
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || 'Failed to setup class subjects');
+      }
+      return data;
+    } catch (error) {
+      console.error('Setup class subjects error:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Get class subjects
+   */
+  static async getClassSubjects(grade, section) {
+  try {
+    const headers = await this.getAuthHeader();
+    const response = await fetch(`${BASE_URL}/class-exams/${grade}/${section}/subjects`, {
+      method: 'GET',
+      headers,
+    });
+    
+    const data = await response.json();
+    if (!response.ok || !data.success) {
+      // Return empty subjects instead of throwing
+      return { success: false, error: data.error || 'Failed to fetch class subjects', subjects: [] };
+    }
+    return { success: true, subjects: data.subjects || [] };
+  } catch (error) {
+    console.error('Get class subjects error:', error);
+    return { success: false, error: error.message, subjects: [] };
+  }
+}
+
+ /**
+   * Create a class exam
+   */
+ static async createClassExam(grade, section, examData) {
+    try {
+      const headers = await this.getAuthHeader();
+      const response = await fetch(`${BASE_URL}/class-exams/${grade}/${section}/exams`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(examData),
+      });
+      
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || 'Failed to create class exam');
+      }
+      return data;
+    } catch (error) {
+      console.error('Create class exam error:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Get all exams for a class
+   */
+  static async getClassExams(grade, section) {
+    try {
+      const headers = await this.getAuthHeader();
+      const response = await fetch(`${BASE_URL}/class-exams/${grade}/${section}/exams`, {
+        method: 'GET',
+        headers,
+      });
+      
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to fetch class exams');
+      }
+      return { 
+        success: true, 
+        exams: Array.isArray(data.exams) ? data.exams : [] 
+      };
+    } catch (error) {
+      console.error('Get class exams error:', error);
+      return { success: false, error: error.message, exams: [] };
+    }
+  }
+
+  /**
+   * Update student marks for a class exam
+   */
+  static async updateStudentClassExamMarks(grade, section, examId, studentId, marks) {
+    try {
+      const headers = await this.getAuthHeader();
+      const response = await fetch(
+        `${BASE_URL}/class-exams/${grade}/${section}/${examId}/${studentId}`,
+        {
+          method: 'PUT',
+          headers,
+          body: JSON.stringify({ marks }),
+        }
+      );
+      
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || 'Failed to update marks');
+      }
+      return data;
+    } catch (error) {
+      console.error('Update class exam marks error:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Get student's marks for all class exams
+   */
+  static async getStudentClassExamMarks(grade, section, studentId) {
+    try {
+      const headers = await this.getAuthHeader();
+      const response = await fetch(
+        `${BASE_URL}/class-exams/${grade}/${section}/${studentId}`,
+        {
+          method: 'GET',
+          headers,
+        }
+      );
+      
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to fetch student marks');
+      }
+      return data;
+    } catch (error) {
+      console.error('Get student class exam marks error:', error);
+      return { success: false, error: error.message, marks: [] };
+    }
+  }
+
+  /**
+   * Delete a class exam
+   */
+ static async deleteClassExam(grade, section, examId) {
+    try {
+      const headers = await this.getAuthHeader();
+      const response = await fetch(`${BASE_URL}/class-exams/${grade}/${section}/exams/${examId}`, {
+        method: 'DELETE',
+        headers,
+      });
+      
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || 'Failed to delete exam');
+      }
+      return data;
+    } catch (error) {
+      console.error('Delete class exam error:', error);
+      return { success: false, error: error.message };
+    }
+  }
 }
 
 export default StudentApi;

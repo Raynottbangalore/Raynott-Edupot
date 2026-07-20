@@ -377,7 +377,7 @@ const AssessmentTab = ({ students, onUpdateStudent }) => {
                 </div>
 
                 {/* Performance Bar */}
-                <div>
+                {/* <div>
                   <div className="flex justify-between text-xs text-gray-600 mb-1">
                     <span>Avg Assessment Score</span>
                     <span className="font-medium text-purple-700">{group.averagePerformance}%</span>
@@ -388,10 +388,10 @@ const AssessmentTab = ({ students, onUpdateStudent }) => {
                       style={{ width: `${group.averagePerformance}%` }}
                     />
                   </div>
-                </div>
+                </div> */}
 
                 {/* Performance Distribution */}
-                <div className="pt-3 border-t border-gray-100">
+                {/* <div className="pt-3 border-t border-gray-100">
                   <div className="flex justify-between text-sm mb-2">
                     <span className="text-gray-600">Excellent (90%+):</span>
                     <span className="font-semibold text-green-600">{group.excellentCount}</span>
@@ -408,7 +408,7 @@ const AssessmentTab = ({ students, onUpdateStudent }) => {
                     <span className="text-gray-600">No Assessments:</span>
                     <span className="font-semibold text-gray-600">{group.noAssessmentsCount}</span>
                   </div>
-                </div>
+                </div> */}
 
                 {/* Total Assessments */}
                 <div className="pt-3 border-t border-gray-100">
@@ -757,7 +757,7 @@ const AssessmentTab = ({ students, onUpdateStudent }) => {
           </div>
 
           {/* Summary Stats Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+          {/* <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
             <div className="bg-gradient-to-r from-purple-50 to-purple-100 p-4 rounded-xl border border-purple-200">
               <p className="text-sm text-gray-600">Total Classes</p>
               <p className="text-2xl font-bold text-gray-800">{summary.totalClasses}</p>
@@ -787,7 +787,7 @@ const AssessmentTab = ({ students, onUpdateStudent }) => {
               <p className="text-sm text-gray-600">No Assessments</p>
               <p className="text-2xl font-bold text-red-700">{summary.noAssessmentsCount}</p>
             </div>
-          </div>
+          </div> */}
 
           {/* Classes and Sections Grid */}
           <div>
