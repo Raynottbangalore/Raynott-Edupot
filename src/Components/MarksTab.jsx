@@ -343,20 +343,11 @@ const MarksTab = ({ students, onUpdateStudent }) => {
             </div>
             
             <div className="p-6 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="text-center">
-                  <Users size={18} className="text-blue-600 mx-auto mb-1" />
-                  <p className="text-2xl font-bold text-gray-800">{group.studentCount}</p>
-                  <p className="text-xs text-gray-500">Total Students</p>
-                </div>
-                <div className="text-center">
-                  <Award size={18} className="text-green-600 mx-auto mb-1" />
-                  <p className="text-2xl font-bold text-gray-800">
-                    {group.totalExams > 0 ? group.averagePerformance : 0}%
-                  </p>
-                  <p className="text-xs text-gray-500">Avg Performance</p>
-                </div>
-              </div>
+              <div className="text-center">
+  <Users size={24} className="text-blue-600 mx-auto mb-2" />
+  <p className="text-3xl font-bold text-gray-800">{group.studentCount}</p>
+  <p className="text-sm text-gray-500">Total Students</p>
+</div>
 
               <button 
                 className="w-full mt-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center space-x-2"

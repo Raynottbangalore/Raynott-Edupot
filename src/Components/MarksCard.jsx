@@ -486,24 +486,25 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
             max-width: 1100px; 
             width: 100%;
             margin: 0 auto; 
-            background: white; 
+            background: linear-gradient(135deg, #ffffff 0%, #f8f9ff 100%);
             padding: 40px; 
-            border: 2px solid #1a2a3a;
-            box-shadow: 0 8px 40px rgba(26, 42, 58, 0.12);
+            border: 2px solid #4a6fa5;
+            box-shadow: 0 8px 40px rgba(74, 111, 165, 0.15);
+            border-radius: 8px;
           }
           .school-name { 
-            text-align: center; 
-            font-size: 26px; 
-            font-weight: 700; 
-            color: #1a2a3a;
-            letter-spacing: 1.5px;
-            text-transform: uppercase;
-            margin-bottom: 5px;
-          }
+  text-align: center; 
+  font-size: 26px; 
+  font-weight: 700; 
+  color: #2c3e50;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  margin-bottom: 5px;
+}
           .school-details {
             text-align: center;
             font-size: 13px;
-            color: #4a5a6a;
+            color: #5a7a9a;
             margin-bottom: 15px;
           }
           .title { 
@@ -511,43 +512,46 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
             font-size: 22px; 
             font-weight: 700; 
             margin: 20px 0; 
-            background: #1a2a3a; 
+            background: linear-gradient(135deg, #2c3e50, #4a6fa5);
             color: white; 
             padding: 12px;
             letter-spacing: 3px;
             text-transform: uppercase;
+            border-radius: 4px;
           }
           .exam-filter-badge {
             text-align: center;
             font-size: 14px;
-            color: #1a2a3a;
-            background: #f0f2f5;
+            color: #2c3e50;
+            background: linear-gradient(135deg, #e8f0fe, #d4e4f7);
             padding: 8px 20px;
             border-radius: 20px;
             display: inline-block;
             margin: 0 auto 15px auto;
             font-weight: 600;
+            border: 1px solid #b8d0e8;
           }
           .student-info { 
             display: grid; 
             grid-template-columns: 1fr 1fr; 
             gap: 10px; 
-            background: #f8f9fa; 
+            background: linear-gradient(135deg, #f0f7ff, #e8f0fe);
             padding: 16px 22px; 
             margin: 15px 0; 
-            border-left: 4px solid #1a2a3a;
+            border-left: 4px solid #4a6fa5;
+            border-radius: 4px;
           }
           .info-item { 
             display: flex; 
             padding: 4px 0;
-            border-bottom: 1px dotted #e0e4e8;
+            border-bottom: 1px dotted #c8d8e8;
           }
           .info-item:last-child {
             border-bottom: none;
           }
           .info-label { 
             font-weight: 600; 
-            color: #1a2a3a;
+            color: #2c3e50;
             width: 130px; 
             font-size: 13px;
           }
@@ -563,14 +567,20 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
             margin: 20px 0; 
           }
           .stat-card { 
-            background: #f8f9fa; 
+            background: linear-gradient(135deg, #f8f9ff, #eef3fa);
             padding: 15px; 
             text-align: center; 
-            border: 1px solid #e0e4e8;
+            border: 1px solid #c8d8e8;
+            border-radius: 6px;
+            transition: transform 0.2s;
           }
+          .stat-card:nth-child(1) { border-top: 3px solid #4a6fa5; }
+          .stat-card:nth-child(2) { border-top: 3px solid #27ae60; }
+          .stat-card:nth-child(3) { border-top: 3px solid #f39c12; }
+          .stat-card:nth-child(4) { border-top: 3px solid #e74c3c; }
           .stat-label { 
             font-size: 11px; 
-            color: #4a5a6a; 
+            color: #5a7a9a; 
             font-weight: 600; 
             text-transform: uppercase;
             letter-spacing: 0.5px;
@@ -578,9 +588,13 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
           .stat-value { 
             font-size: 24px; 
             font-weight: 700; 
-            color: #1a2a3a;
+            color: #2c3e50;
             margin-top: 4px;
           }
+          .stat-card:nth-child(1) .stat-value { color: #4a6fa5; }
+          .stat-card:nth-child(2) .stat-value { color: #27ae60; }
+          .stat-card:nth-child(3) .stat-value { color: #f39c12; }
+          .stat-card:nth-child(4) .stat-value { color: #e74c3c; }
           .exam-section {
             margin-top: 30px;
           }
@@ -588,36 +602,38 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            border-bottom: 2px solid #1a2a3a;
+            border-bottom: 2px solid #4a6fa5;
             padding-bottom: 10px;
             margin-bottom: 20px;
           }
           .exam-section-header h3 {
             font-size: 18px;
             font-weight: 700;
-            color: #1a2a3a;
+            color: #2c3e50;
           }
           .exam-section-header .badge {
             font-size: 12px;
-            color: #4a5a6a;
-            background: #f0f2f5;
+            color: #2c3e50;
+            background: linear-gradient(135deg, #e8f0fe, #d4e4f7);
             padding: 4px 14px;
             border-radius: 20px;
             font-weight: 500;
+            border: 1px solid #b8d0e8;
           }
           .exam-card { 
-            background: #f8f9fa; 
-            border: 1px solid #e0e4e8; 
+            background: linear-gradient(135deg, #f8faff, #eef3fa);
+            border: 1px solid #c8d8e8; 
             margin: 15px 0; 
             overflow: hidden;
+            border-radius: 6px;
           }
           .exam-card-header {
-            background: #ffffff;
+            background: linear-gradient(135deg, #ffffff, #f0f7ff);
             padding: 12px 20px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            border-bottom: 1px solid #e0e4e8;
+            border-bottom: 1px solid #c8d8e8;
             flex-wrap: wrap;
             gap: 8px;
           }
@@ -627,7 +643,7 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
             gap: 12px;
           }
           .exam-number {
-            background: #1a2a3a;
+            background: linear-gradient(135deg, #4a6fa5, #2c3e50);
             color: #ffffff;
             width: 28px;
             height: 28px;
@@ -641,11 +657,11 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
           .exam-name {
             font-weight: 600;
             font-size: 15px;
-            color: #1a2a3a;
+            color: #2c3e50;
           }
           .exam-date {
             font-size: 12px;
-            color: #4a5a6a;
+            color: #5a7a9a;
           }
           .exam-score {
             display: flex;
@@ -655,14 +671,14 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
           .exam-percentage {
             font-weight: 700;
             font-size: 18px;
-            color: #1a2a3a;
+            color: #2c3e50;
           }
           .exam-grade-badge {
             font-weight: 700;
             font-size: 13px;
             padding: 4px 16px;
             border-radius: 20px;
-            background: #1a2a3a;
+            background: linear-gradient(135deg, #2c3e50, #4a6fa5);
             color: #ffffff;
           }
           table { 
@@ -670,7 +686,7 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
             border-collapse: collapse; 
           }
           th { 
-            background: #1a2a3a; 
+            background: linear-gradient(135deg, #2c3e50, #4a6fa5);
             color: white; 
             padding: 10px 14px; 
             text-align: center; 
@@ -681,21 +697,27 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
           td { 
             padding: 8px 14px; 
             text-align: center; 
-            border-bottom: 1px solid #e0e4e8;
+            border-bottom: 1px solid #d8e4f0;
             font-size: 13px;
+          }
+          tr:nth-child(even) {
+            background: #f8fbff;
+          }
+          tr:hover {
+            background: #eaf2fa;
           }
           .subject-name {
             text-align: left;
             font-weight: 500;
-            color: #1a2a3a;
+            color: #2c3e50;
             padding-left: 20px;
           }
           .total-row { 
-            background: #e8ecf0; 
+            background: linear-gradient(135deg, #eaf2fa, #dce8f5);
             font-weight: 700;
           }
           .total-row td {
-            border-top: 2px solid #1a2a3a;
+            border-top: 2px solid #4a6fa5;
             padding: 12px 14px;
           }
           .subject-grade-badge {
@@ -703,8 +725,9 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
             padding: 3px 12px;
             border-radius: 12px;
             font-size: 11px;
-            background: #f0f2f5;
-            color: #1a2a3a;
+            background: linear-gradient(135deg, #e8f0fe, #d4e4f7);
+            color: #2c3e50;
+            border: 1px solid #b8d0e8;
           }
           .no-data { 
             text-align: center; 
@@ -718,14 +741,14 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
             gap: 20px; 
             margin-top: 30px; 
             padding-top: 22px; 
-            border-top: 2px solid #1a2a3a;
+            border-top: 2px solid #4a6fa5;
           }
           .signature-block { 
             text-align: center; 
           }
           .signature-line { 
             margin-top: 38px; 
-            border-top: 1px solid #1a2a3a; 
+            border-top: 2px solid #4a6fa5; 
             width: 70%; 
             margin-left: auto; 
             margin-right: auto; 
@@ -733,7 +756,7 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
           .signature-label {
             font-size: 12px;
             font-weight: 600;
-            color: #1a2a3a;
+            color: #2c3e50;
             margin-top: 8px;
             text-transform: uppercase;
             letter-spacing: 0.5px;
@@ -742,7 +765,7 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
             text-align: center; 
             margin-top: 20px; 
             padding-top: 14px;
-            border-top: 1px solid #e0e4e8;
+            border-top: 1px solid #d8e4f0;
             color: #7a8a9a; 
             font-size: 11px;
             letter-spacing: 0.5px;
@@ -754,7 +777,7 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
             transform: translate(-50%, -50%) rotate(-30deg);
             font-size: 80px;
             font-weight: 900;
-            color: rgba(26, 42, 58, 0.03);
+            color: rgba(74, 111, 165, 0.04);
             pointer-events: none;
             letter-spacing: 10px;
             white-space: nowrap;
@@ -764,7 +787,7 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
           }
           @media print { 
             body { background: white; padding: 0; } 
-            .marks-card { border: 2px solid #1a2a3a; box-shadow: none; }
+            .marks-card { border: 2px solid #4a6fa5; box-shadow: none; }
           }
           @media (max-width: 768px) {
             .marks-card { padding: 20px; }
@@ -780,6 +803,7 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
             color: #7a8a9a;
             font-style: italic;
           }
+            
         </style>
       </head>
       <body>
@@ -795,9 +819,7 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
           
           <div class="title">Performance Report</div>
           
-          <div style="text-align:center;">
-            <span class="exam-filter-badge">${escapeHtml(examTypeDisplay)}</span>
-          </div>
+          
           
           <div class="student-info">
             <div class="info-item"><span class="info-label">Student Name:</span> <span class="info-value">${escapeHtml(basicInfo.name || 'N/A')}</span></div>
@@ -818,7 +840,6 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
           <div class="exam-section">
             <div class="exam-section-header">
               <h3>Examination Details</h3>
-              ${hasExams ? `<span class="badge">${exams.length} Exams</span>` : ''}
             </div>
 
             ${hasExams ? exams.map((exam, index) => {
@@ -833,16 +854,13 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
               <div class="exam-card">
                 <div class="exam-card-header">
                   <div class="exam-title-group">
-                    <div class="exam-number">${index + 1}</div>
+                    
                     <div>
                       <div class="exam-name">${escapeHtml(exam.examType || 'Examination ' + (index + 1))}</div>
                       <div class="exam-date">${exam.examDate ? escapeHtml(exam.examDate) : ''}</div>
                     </div>
                   </div>
-                  <div class="exam-score">
-                    <span class="exam-percentage">${examPercentage}%</span>
-                    <span class="exam-grade-badge">${escapeHtml(examGrade)}</span>
-                  </div>
+                 
                 </div>
                 
                 ${subjects && subjects.length > 0 ? `
@@ -868,7 +886,7 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
                         <td>${subMarks}</td>
                         <td>${subTotal}</td>
                         <td>${subPercentage}%</td>
-                        <td><span class="subject-grade-badge">${escapeHtml(subGrade)}</span></td>
+                        <td><span >${escapeHtml(subGrade)}</span></td>
                       </tr>
                       `;
                     }).join('')}
@@ -877,7 +895,7 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
                       <td>${totalMarks}</td>
                       <td>${totalPossible}</td>
                       <td>${examPercentage}%</td>
-                      <td><span class="subject-grade-badge">${escapeHtml(examGrade)}</span></td>
+                      <td><span>${escapeHtml(examGrade)}</span></td>
                     </tr>
                   </tbody>
                 </table>
@@ -906,10 +924,6 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
               <div class="signature-line"></div>
               <div class="signature-label">Principal</div>
             </div>
-          </div>
-          
-          <div class="footer">
-            Generated on ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
           </div>
         </div>
       </body>
