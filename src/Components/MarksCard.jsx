@@ -504,21 +504,24 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
           .school-details {
             text-align: center;
             font-size: 13px;
-            color: #5a7a9a;
+            color: #24415f;
             margin-bottom: 15px;
           }
-          .title { 
-            text-align: center; 
-            font-size: 22px; 
-            font-weight: 700; 
-            margin: 20px 0; 
-            background: linear-gradient(135deg, #2c3e50, #4a6fa5);
-            color: white; 
-            padding: 12px;
-            letter-spacing: 3px;
-            text-transform: uppercase;
-            border-radius: 4px;
-          }
+          .title-underline {
+  border: none;
+   border-top: 7px solid #1a2a3a;
+  margin: 10px auto 20px auto;
+  width: 100%;
+}
+.title { 
+  text-align: center; 
+  font-size: 24px; 
+  font-weight: 700; 
+  color: #2c3e50;
+  margin: 15px 0 5px 0;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+}
           .exam-filter-badge {
             text-align: center;
             font-size: 14px;
@@ -810,15 +813,16 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
         <div class="marks-card">
           <div class="watermark">PERFORMANCE REPORT</div>
           
-          <div class="school-name">${escapeHtml(schoolName)}</div>
-          <div class="school-details">
-            Phone: ${escapeHtml(schoolInfo.schoolPhone || '')} | 
-            Email: ${escapeHtml(schoolInfo.schoolEmail || '')} | 
-            Address: ${escapeHtml(schoolInfo.schoolAddress || '')}
-          </div>
-          
-          <div class="title">Performance Report</div>
-          
+         <div class="school-name">${escapeHtml(schoolName)}</div>
+<div class="school-details">
+  Phone: ${escapeHtml(schoolInfo.schoolPhone || '')} | 
+  Email: ${escapeHtml(schoolInfo.schoolEmail || '')} | 
+  Address: ${escapeHtml(schoolInfo.schoolAddress || '')}
+</div>
+
+<hr class="title-underline" />
+
+<div class="title">Performance Report</div>
           
           
           <div class="student-info">

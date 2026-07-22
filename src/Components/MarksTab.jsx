@@ -27,16 +27,18 @@ const MarksTab = ({ students, onUpdateStudent }) => {
   const [selectedExamForMarks, setSelectedExamForMarks] = useState(null);
   const [loading, setLoading] = useState(false);
   const [examsLoaded, setExamsLoaded] = useState(false);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
   
   // New Exam Form
   const [newExam, setNewExam] = useState({
     examType: '',
     examDate: new Date().toISOString().split('T')[0],
+    isNewExam: true // Flag to track if user wants to create new exam
   });
 
   // Subject setup form
   const [subjectSetup, setSubjectSetup] = useState({
-    subjects: [{ id: Date.now().toString(), name: '', total: 100 }]
+    subjects: [{ id: Date.now().toString(), name: '', total: '' }]
   });
 
   // Get unique grades and sections
@@ -46,11 +48,13 @@ const MarksTab = ({ students, onUpdateStudent }) => {
   // Load class exams and subjects when a class is selected
   useEffect(() => {
     if (selectedClass) {
+      setIsInitialLoad(true);
       loadClassData(selectedClass.grade, selectedClass.section);
     } else {
       setClassExams([]);
       setClassSubjects([]);
       setExamsLoaded(false);
+      setIsInitialLoad(true);
     }
   }, [selectedClass]);
 
@@ -63,8 +67,25 @@ const MarksTab = ({ students, onUpdateStudent }) => {
       const subjectsResult = await StudentApi.getClassSubjects(grade, section);
       if (subjectsResult.success && subjectsResult.subjects) {
         setClassSubjects(subjectsResult.subjects);
+        // Update subject setup form with loaded subjects
+        if (subjectsResult.subjects.length > 0) {
+          setSubjectSetup({
+            subjects: subjectsResult.subjects.map(s => ({
+              id: s.id || Date.now().toString() + Math.random(),
+              name: s.name || '',
+              total: s.total || ''
+            }))
+          });
+        } else {
+          setSubjectSetup({
+            subjects: [{ id: Date.now().toString(), name: '', total: '' }]
+          });
+        }
       } else {
         setClassSubjects([]);
+        setSubjectSetup({
+          subjects: [{ id: Date.now().toString(), name: '', total: '' }]
+        });
       }
 
       // Then load exams
@@ -88,6 +109,7 @@ const MarksTab = ({ students, onUpdateStudent }) => {
     } finally {
       setLoading(false);
       setExamsLoaded(true);
+      setIsInitialLoad(false);
     }
   };
 
@@ -131,7 +153,7 @@ const MarksTab = ({ students, onUpdateStudent }) => {
   const addSetupSubject = () => {
     setSubjectSetup({
       ...subjectSetup,
-      subjects: [...subjectSetup.subjects, { id: Date.now().toString(), name: '', total: 100 }]
+      subjects: [...subjectSetup.subjects, { id: Date.now().toString(), name: '', total: '' }]
     });
   };
 
@@ -150,7 +172,7 @@ const MarksTab = ({ students, onUpdateStudent }) => {
     const updatedSubjects = [...subjectSetup.subjects];
     updatedSubjects[index] = {
       ...updatedSubjects[index],
-      [field]: field === 'total' ? parseFloat(value) || 0 : value
+      [field]: field === 'total' ? value : value // Keep as string for blank state
     };
     setSubjectSetup({
       ...subjectSetup,
@@ -174,7 +196,7 @@ const MarksTab = ({ students, onUpdateStudent }) => {
   // Create new class exam
   const handleCreateExam = async () => {
     if (!newExam.examType.trim()) {
-      toast.error('Please enter exam type');
+      toast.error('Please select or enter exam type');
       return;
     }
 
@@ -204,6 +226,7 @@ const MarksTab = ({ students, onUpdateStudent }) => {
         setNewExam({
           examType: '',
           examDate: new Date().toISOString().split('T')[0],
+          isNewExam: true
         });
       } else {
         toast.error(result.error || 'Failed to create exam');
@@ -301,6 +324,18 @@ const MarksTab = ({ students, onUpdateStudent }) => {
     setClassExams([]);
     setClassSubjects([]);
     setExamsLoaded(false);
+    setIsInitialLoad(true);
+  };
+
+  // Get existing exam types for dropdown
+  const getExistingExamTypes = () => {
+    const examTypes = new Set();
+    classExams.forEach(exam => {
+      if (exam.examType) {
+        examTypes.add(exam.examType);
+      }
+    });
+    return Array.from(examTypes).sort();
   };
 
   // Render class view
@@ -344,10 +379,10 @@ const MarksTab = ({ students, onUpdateStudent }) => {
             
             <div className="p-6 space-y-4">
               <div className="text-center">
-  <Users size={24} className="text-blue-600 mx-auto mb-2" />
-  <p className="text-3xl font-bold text-gray-800">{group.studentCount}</p>
-  <p className="text-sm text-gray-500">Total Students</p>
-</div>
+                <Users size={24} className="text-blue-600 mx-auto mb-2" />
+                <p className="text-3xl font-bold text-gray-800">{group.studentCount}</p>
+                <p className="text-sm text-gray-500">Total Students</p>
+              </div>
 
               <button 
                 className="w-full mt-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center space-x-2"
@@ -403,14 +438,33 @@ const MarksTab = ({ students, onUpdateStudent }) => {
             
             <div className="flex items-center space-x-3">
               <button
-                onClick={() => setShowSetupSubjectsModal(true)}
+                onClick={() => {
+                  // Reset subject setup with current subjects
+                  setSubjectSetup({
+                    subjects: classSubjects.length > 0 
+                      ? classSubjects.map(s => ({
+                          id: s.id || Date.now().toString() + Math.random(),
+                          name: s.name || '',
+                          total: s.total || ''
+                        }))
+                      : [{ id: Date.now().toString(), name: '', total: '' }]
+                  });
+                  setShowSetupSubjectsModal(true);
+                }}
                 className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 flex items-center space-x-2"
               >
                 <Settings size={18} />
                 <span>{hasSubjects ? 'Edit Subjects' : 'Setup Subjects'}</span>
               </button>
               <button
-                onClick={() => setShowAddExamModal(true)}
+                onClick={() => {
+                  setNewExam({
+                    examType: '',
+                    examDate: new Date().toISOString().split('T')[0],
+                    isNewExam: true
+                  });
+                  setShowAddExamModal(true);
+                }}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2"
                 disabled={!hasSubjects}
               >
@@ -437,7 +491,7 @@ const MarksTab = ({ students, onUpdateStudent }) => {
             </span>
           </h3>
 
-          {loading ? (
+          {loading && isInitialLoad ? (
             <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
               <div className="animate-spin h-8 w-8 border-4 border-blue-600 border-t-transparent rounded-full mx-auto mb-4" />
               <p className="text-gray-500">Loading exams...</p>
@@ -448,7 +502,14 @@ const MarksTab = ({ students, onUpdateStudent }) => {
               <h4 className="text-lg font-semibold text-gray-800 mb-2">No exams created yet</h4>
               <p className="text-gray-500 mb-4">Create an exam to start recording marks for this class</p>
               <button
-                onClick={() => setShowAddExamModal(true)}
+                onClick={() => {
+                  setNewExam({
+                    examType: '',
+                    examDate: new Date().toISOString().split('T')[0],
+                    isNewExam: true
+                  });
+                  setShowAddExamModal(true);
+                }}
                 className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
                 disabled={!hasSubjects}
               >
@@ -532,12 +593,6 @@ const MarksTab = ({ students, onUpdateStudent }) => {
                 <button
                   onClick={() => {
                     setShowSetupSubjectsModal(false);
-                    // Reset form
-                    setSubjectSetup({
-                      subjects: classSubjects.length > 0 
-                        ? classSubjects 
-                        : [{ id: Date.now().toString(), name: '', total: 100 }]
-                    });
                   }}
                   className="text-gray-400 hover:text-gray-700 p-2 rounded-full hover:bg-gray-100"
                 >
@@ -593,11 +648,6 @@ const MarksTab = ({ students, onUpdateStudent }) => {
                   <button
                     onClick={() => {
                       setShowSetupSubjectsModal(false);
-                      setSubjectSetup({
-                        subjects: classSubjects.length > 0 
-                          ? classSubjects 
-                          : [{ id: Date.now().toString(), name: '', total: 100 }]
-                      });
                     }}
                     className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
                   >
@@ -645,13 +695,43 @@ const MarksTab = ({ students, onUpdateStudent }) => {
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Exam Type *
                   </label>
-                  <input
-                    type="text"
-                    value={newExam.examType}
-                    onChange={(e) => setNewExam({ ...newExam, examType: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    placeholder="e.g., Unit Test 1"
-                  />
+                  <div className="flex flex-col space-y-2">
+                    <select
+                      value={newExam.isNewExam ? '' : newExam.examType}
+                      onChange={(e) => {
+                        if (e.target.value === 'new') {
+                          setNewExam({ 
+                            ...newExam, 
+                            isNewExam: true, 
+                            examType: '' 
+                          });
+                        } else {
+                          setNewExam({ 
+                            ...newExam, 
+                            isNewExam: false, 
+                            examType: e.target.value 
+                          });
+                        }
+                      }}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">Select existing exam type</option>
+                      {getExistingExamTypes().map(type => (
+                        <option key={type} value={type}>{type}</option>
+                      ))}
+                      <option value="new">+ Add New Exam Type</option>
+                    </select>
+                    
+                    {newExam.isNewExam && (
+                      <input
+                        type="text"
+                        value={newExam.examType}
+                        onChange={(e) => setNewExam({ ...newExam, examType: e.target.value })}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        placeholder="Enter new exam type (e.g., Unit Test 1)"
+                      />
+                    )}
+                  </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
