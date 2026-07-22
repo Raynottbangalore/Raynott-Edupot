@@ -1,6 +1,9 @@
 // src/components/dashboard/DynamicDashboard.jsx
 import React, { useState, useEffect } from 'react';
-import { LogOut, Users, UserPlus, List, BarChart3, Search, DollarSign, Award } from 'lucide-react';
+import { 
+  LogOut, Users, UserPlus, List, BarChart3, Search, DollarSign, Award, 
+  Ticket, School, MapPin, Award as AwardIcon, Building 
+} from 'lucide-react';
 import { toast } from 'react-toastify';
 import { auth } from '../service/firebase';
 import SchoolApi from '../service/SchoolApi';
@@ -11,6 +14,9 @@ import AddStudent from '../Components/AddStudents';
 import FeesTab from '../Components/FeesTab';
 import MarksTab from '../Components/MarksTab';
 import AssessmentTab from '../Components/AssessmentTab';
+import TeachersAssessment from '../Components/TeachersAssessment';
+import HallTicket from '../Components/HallTicket';
+import MarksCard from '../Components/MarksCard';
 
 // Tab Icons & Names Mapping
 const TAB_CONFIG = {
@@ -19,7 +25,11 @@ const TAB_CONFIG = {
   addStudent: { icon: UserPlus, name: 'Add New Student' },
   fees: { icon: DollarSign, name: 'Fees' },
   marks: { icon: Award, name: 'Marks' },
-  assessments: { icon: BarChart3, name: 'Assessment Reports' }
+  marksCard: { icon: AwardIcon, name: 'Marks Card' },
+  assessment: { icon: BarChart3, name: 'Assessment Reports' },
+  assessments: { icon: BarChart3, name: 'Assessment Reports' }, // Backward compatibility
+  teachers: { icon: Users, name: 'Teachers Assessment' },
+  hallticket: { icon: Ticket, name: 'Hall Ticket' }
 };
 
 // Tab Components Mapping
@@ -29,7 +39,11 @@ const TAB_COMPONENTS = {
   addStudent: AddStudent,
   fees: FeesTab,
   marks: MarksTab,
-  assessments: AssessmentTab
+  marksCard: MarksCard,
+  assessment: AssessmentTab,
+  assessments: AssessmentTab, // Backward compatibility
+  teachers: TeachersAssessment, // Make sure this is TeachersAssessment
+  hallticket: HallTicket
 };
 
 const DynamicDashboard = () => {
@@ -42,6 +56,19 @@ const DynamicDashboard = () => {
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [schoolInfo, setSchoolInfo] = useState({
+    schoolName: '',
+    schoolAddress: '',
+    schoolAffiliation: ''
+  });
+  const [isSchoolInfoLoading, setIsSchoolInfoLoading] = useState(true);
+
+  // Helper function to normalize tab IDs
+  const normalizeTabId = (tabId) => {
+    // Map 'assessments' to 'assessment'
+    if (tabId === 'assessments') return 'assessment';
+    return tabId;
+  };
 
   // Fetch user data and tab configuration on mount
   useEffect(() => {
@@ -71,28 +98,42 @@ const DynamicDashboard = () => {
         // Get enabled tabs from user profile
         let tabs = profileData.enabledTabs || [];
         
+        // Normalize tab IDs (convert 'assessments' to 'assessment')
+        tabs = tabs.map(normalizeTabId);
+        
+        // Remove duplicates
+        tabs = [...new Set(tabs)];
+        
         // If user has fullAccess, get all tabs
         if (profileData.fullAccess) {
-          tabs = Object.keys(TAB_CONFIG);
+          tabs = Object.keys(TAB_CONFIG).map(normalizeTabId);
+          tabs = [...new Set(tabs)];
         }
         
         // If still no tabs, get school default tabs
         if (tabs.length === 0 && profileData.schoolId) {
           const schoolConfig = await SchoolApi.getSchoolTabConfig(profileData.schoolId);
           if (schoolConfig.success && schoolConfig.enabledTabs) {
-            tabs = schoolConfig.enabledTabs;
+            tabs = schoolConfig.enabledTabs.map(normalizeTabId);
+            tabs = [...new Set(tabs)];
           } else {
             // Default tabs if nothing is configured
             tabs = ['search', 'allStudents', 'addStudent'];
           }
         }
         
-        setEnabledTabs(tabs);
-        if (tabs.length > 0 && tabs.includes(activeTab)) {
+        // Filter out any invalid tabs
+        const validTabs = tabs.filter(tabId => TAB_CONFIG[tabId]);
+        
+        setEnabledTabs(validTabs);
+        if (validTabs.length > 0 && validTabs.includes(activeTab)) {
           // Keep current tab if it's enabled
-        } else if (tabs.length > 0) {
-          setActiveTab(tabs[0]);
+        } else if (validTabs.length > 0) {
+          setActiveTab(validTabs[0]);
         }
+        
+        // Fetch school info
+        await loadSchoolInfo();
         
         // Fetch all students
         await refreshStudents();
@@ -107,6 +148,21 @@ const DynamicDashboard = () => {
     
     fetchUserData();
   }, []);
+
+  // Load school info
+  const loadSchoolInfo = async () => {
+    setIsSchoolInfoLoading(true);
+    try {
+      const result = await StudentApi.getSchoolInfo();
+      if (result.success && result.data) {
+        setSchoolInfo(result.data);
+      }
+    } catch (error) {
+      console.error('Error loading school info:', error);
+    } finally {
+      setIsSchoolInfoLoading(false);
+    }
+  };
   
   // Refresh students function
   const refreshStudents = async () => {
@@ -229,6 +285,100 @@ const DynamicDashboard = () => {
     toast.info('Student list refreshed');
   };
 
+  // Render the active tab component with appropriate props
+  const renderActiveTab = () => {
+    // Normalize the active tab ID
+    const normalizedTab = normalizeTabId(activeTab);
+    
+    // Log for debugging
+    console.log('Active tab:', activeTab, 'Normalized:', normalizedTab);
+    
+    const Component = TAB_COMPONENTS[normalizedTab];
+    
+    if (!Component) {
+      return (
+        <div className="text-center py-12 bg-white rounded-xl shadow-md">
+          <div className="text-6xl mb-4">⚠️</div>
+          <h3 className="text-xl font-semibold text-gray-700 mb-2">Component Not Found</h3>
+          <p className="text-gray-500">The component for tab "{activeTab}" could not be found.</p>
+          <p className="text-sm text-gray-400 mt-2">Available tabs: {Object.keys(TAB_COMPONENTS).join(', ')}</p>
+          <button
+            onClick={() => setActiveTab(enabledTabs[0] || 'search')}
+            className="mt-4 px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700"
+          >
+            Go to first tab
+          </button>
+        </div>
+      );
+    }
+
+    // Common props for all tabs
+    const commonProps = {
+      students: students,
+      onUpdateStudent: handleUpdateStudent,
+    };
+
+    // Special props for specific tabs
+    switch (normalizedTab) {
+      case 'addStudent':
+        return (
+          <AddStudent
+            onAddStudent={handleAddStudent}
+            onCancel={() => setActiveTab(enabledTabs[0] || 'search')}
+          />
+        );
+      case 'search':
+        return (
+          <StudentList
+            students={filteredStudents}
+            onSelectStudent={setSelectedStudent}
+            onDeleteStudent={handleDeleteStudent}
+            onAddNew={() => setActiveTab('addStudent')}
+            onUpdateStudent={handleUpdateStudent}
+          />
+        );
+      case 'marksCard':
+        return (
+          <MarksCard
+            {...commonProps}
+            schoolInfo={schoolInfo}
+          />
+        );
+      case 'hallticket':
+        return (
+          <HallTicket
+            {...commonProps}
+            schoolInfo={schoolInfo}
+          />
+        );
+      case 'allStudents':
+        return (
+          <AllStudents
+            students={students}
+            onViewDetails={setSelectedStudent}
+            onDelete={handleDeleteStudent}
+            onUpdateStudent={handleUpdateStudent}
+            onRefresh={handleRefresh}
+            isLoading={isLoading || refreshing}
+          />
+        );
+      case 'assessment':
+        return (
+          <AssessmentTab
+            {...commonProps}
+          />
+        );
+      case 'teachers':
+        return (
+          <TeachersAssessment
+            {...commonProps}
+          />
+        );
+      default:
+        return <Component {...commonProps} />;
+    }
+  };
+
   // Don't render if no tabs are enabled
   if (!loading && enabledTabs.length === 0) {
     return (
@@ -261,50 +411,83 @@ const DynamicDashboard = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100">
-      {/* Header - Same as Dashboard.jsx */}
+      {/* Header */}
       <header className="bg-gradient-to-r from-amber-800 via-amber-700 to-amber-600 shadow-lg">
-        <div className="px-6 py-4 flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-bold text-white">Raynott Edupot</h1>
-            <p className="text-amber-100">School Fee Management System</p>
-          </div>
-          <div className="flex items-center space-x-6">
-            <div className="text-right">
-              <p className="font-semibold text-lg text-white">Welcome, {user?.name || user?.email}</p>
-              <p className="text-sm text-amber-200">{user?.email}</p>
+        <div className="px-6 py-4">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+            {/* Left Side - School Info */}
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-3">
+                <div className="p-2 bg-amber-600/30 rounded-xl">
+                  <School className="text-white" size={24} />
+                </div>
+                <div>
+                  <h1 className="text-2xl font-bold text-white">
+                    {isSchoolInfoLoading ? 'Loading...' : schoolInfo.schoolName || 'School Name'}
+                  </h1>
+                  <div className="flex flex-wrap items-center space-x-3 text-xs">
+                    {schoolInfo.schoolAffiliation && (
+                      <span className="flex items-center space-x-1 text-amber-100">
+                        <AwardIcon size={12} />
+                        <span>{schoolInfo.schoolAffiliation}</span>
+                      </span>
+                    )}
+                    {schoolInfo.schoolAddress && (
+                      <>
+                        <span className="text-amber-300/50">|</span>
+                        <span className="flex items-center space-x-1 text-amber-200/80">
+                          <MapPin size={12} />
+                          <span>{schoolInfo.schoolAddress}</span>
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
-            <button
-              onClick={handleLogout}
-              className="flex items-center space-x-2 px-5 py-2.5 bg-white/20 hover:bg-white/30 rounded-xl transition-all duration-300 backdrop-blur-sm text-white"
-            >
-              <LogOut size={18} />
-              <span className="font-medium">Logout</span>
-            </button>
+            
+            {/* Right Side - User Info & Logout */}
+            <div className="flex items-center space-x-6">
+              <div className="text-right">
+                <p className="font-semibold text-lg text-white">Welcome, {user?.name || user?.email}</p>
+                <p className="text-sm text-amber-200">{user?.email}</p>
+              </div>
+              <button
+                onClick={handleLogout}
+                className="flex items-center space-x-2 px-5 py-2.5 bg-white/20 hover:bg-white/30 rounded-xl transition-all duration-300 backdrop-blur-sm text-white"
+              >
+                <LogOut size={18} />
+                <span className="font-medium">Logout</span>
+              </button>
+            </div>
           </div>
         </div>
       </header>
 
       {/* Navigation Tabs - Dynamic based on enabledTabs */}
-      <div className="border-b border-gray-200 bg-white shadow-sm">
+      <div className="border-b border-gray-200 bg-white shadow-sm overflow-x-auto">
         <div className="px-6">
-          <nav className="flex space-x-8 overflow-x-auto scrollbar-hide">
+          <nav className="flex space-x-4 md:space-x-8 min-w-max">
             {enabledTabs.map((tabId) => {
-              const TabIcon = TAB_CONFIG[tabId]?.icon;
+              const normalizedId = normalizeTabId(tabId);
+              const TabIcon = TAB_CONFIG[normalizedId]?.icon;
+              const tabName = TAB_CONFIG[normalizedId]?.name || tabId;
+              
               return (
                 <button
                   key={tabId}
                   onClick={() => setActiveTab(tabId)}
-                  className={`px-4 py-4 font-medium text-sm transition-all relative whitespace-nowrap ${
-                    activeTab === tabId
+                  className={`px-3 py-4 font-medium text-sm transition-all relative whitespace-nowrap ${
+                    normalizeTabId(activeTab) === normalizedId
                       ? 'text-amber-600'
                       : 'text-gray-500 hover:text-gray-700'
                   }`}
                 >
                   <div className="flex items-center space-x-2">
-                    {TabIcon && <TabIcon size={18} />}
-                    <span>{TAB_CONFIG[tabId]?.name || tabId}</span>
+                    {TabIcon && <TabIcon size={16} />}
+                    <span>{tabName}</span>
                   </div>
-                  {activeTab === tabId && (
+                  {normalizeTabId(activeTab) === normalizedId && (
                     <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-amber-600"></div>
                   )}
                 </button>
@@ -314,70 +497,33 @@ const DynamicDashboard = () => {
         </div>
       </div>
 
-      {/* Main Content - Same structure as Dashboard.jsx */}
+      {/* Main Content */}
       <div className="p-6">
-        {activeTab === 'addStudent' ? (
-          <AddStudent
-            onAddStudent={handleAddStudent}
-            onCancel={() => setActiveTab('allStudents')}
-          />
-        ) : activeTab === 'search' ? (
-          <StudentList
-            students={filteredStudents}
-            onSelectStudent={setSelectedStudent}
-            onDeleteStudent={handleDeleteStudent}
-            onAddNew={() => setActiveTab('addStudent')}
-            onUpdateStudent={handleUpdateStudent}
-          />
-        ) : activeTab === 'fees' ? (
-          <FeesTab
-            students={students}
-            onUpdateStudent={handleUpdateStudent}
-          />
-        ) : activeTab === 'marks' ? (
-          <MarksTab
-            students={students}
-            onUpdateStudent={handleUpdateStudent}
-          />
-        ) : activeTab === 'assessments' ? (
-          <AssessmentTab
-            students={students}
-            onUpdateStudent={handleUpdateStudent}
-          />
-        ) : (
-          <AllStudents
-            students={students}
-            onViewDetails={setSelectedStudent}
-            onDelete={handleDeleteStudent}
-            onUpdateStudent={handleUpdateStudent}
-            onRefresh={handleRefresh}
-            isLoading={isLoading || refreshing}
-          />
-        )}
+        {renderActiveTab()}
       </div>
 
-      {/* CSS for highlighting new students and hiding scrollbar */}
-      <style jsx>{`
-        .highlight-new-student {
-          animation: highlight 3s ease-out;
-        }
-        
-        @keyframes highlight {
-          0% { background-color: rgba(251, 191, 36, 0.2); }
-          100% { background-color: transparent; }
-        }
-        
-        /* Hide scrollbar for Chrome, Safari and Opera */
-        .scrollbar-hide::-webkit-scrollbar {
-          display: none;
-        }
-        
-        /* Hide scrollbar for IE, Edge and Firefox */
-        .scrollbar-hide {
-          -ms-overflow-style: none;
-          scrollbar-width: none;
-        }
-      `}</style>
+      {/* CSS */}
+      <style>
+        {`
+          .highlight-new-student {
+            animation: highlight 3s ease-out;
+          }
+          
+          @keyframes highlight {
+            0% { background-color: rgba(251, 191, 36, 0.2); }
+            100% { background-color: transparent; }
+          }
+          
+          .scrollbar-hide::-webkit-scrollbar {
+            display: none;
+          }
+          
+          .scrollbar-hide {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+          }
+        `}
+      </style>
     </div>
   );
 };

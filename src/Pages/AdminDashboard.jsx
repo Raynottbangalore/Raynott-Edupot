@@ -13,14 +13,33 @@ import { auth } from '../service/firebase';
 import SchoolApi from '../service/SchoolApi';  
 import { useNavigate } from 'react-router-dom';
 
+// Updated AVAILABLE_TABS with all dashboard tabs
 const AVAILABLE_TABS = [
   { id: 'search', name: 'Search Students', icon: '🔍', description: 'Search and filter students' },
   { id: 'allStudents', name: 'All Students', icon: '📋', description: 'View complete student list' },
   { id: 'addStudent', name: 'Add Student', icon: '➕', description: 'Register new students' },
   { id: 'fees', name: 'Fees Management', icon: '💰', description: 'Manage fees and installments' },
   { id: 'marks', name: 'Marks & Grades', icon: '📊', description: 'Record and view marks' },
-  { id: 'assessments', name: 'Assessments', icon: '📝', description: 'Manage assessments' }
+  { id: 'marksCard', name: 'Marks Card', icon: '🏆', description: 'View student marks cards' },
+  { id: 'assessment', name: 'Assessment Reports', icon: '📈', description: 'View assessment reports' },
+  { id: 'teachers', name: 'Teachers Assessment', icon: '👨‍🏫', description: 'Teachers assessment view' },
+  { id: 'hallticket', name: 'Hall Ticket', icon: '🎫', description: 'Generate hall tickets' }
 ];
+
+// Helper function to normalize tab IDs (for backward compatibility)
+const normalizeTabId = (tabId) => {
+  // Map 'assessments' (plural) to 'assessment' (singular)
+  if (tabId === 'assessments') return 'assessment';
+  return tabId;
+};
+
+// Helper function to normalize an array of tab IDs
+const normalizeTabs = (tabs) => {
+  if (!tabs || !Array.isArray(tabs)) return [];
+  const normalized = tabs.map(normalizeTabId);
+  // Remove duplicates
+  return [...new Set(normalized)];
+};
 
 const AdminDashboard = ({ user, onLogout }) => {
   const [schools, setSchools] = useState([]);
@@ -69,7 +88,7 @@ const AdminDashboard = ({ user, onLogout }) => {
     }
   };
 
-    const handleTabToggle = (tabId) => {
+  const handleTabToggle = (tabId) => {
     setTempSelectedTabs(prev => 
       prev.includes(tabId) 
         ? prev.filter(id => id !== tabId)
@@ -80,9 +99,15 @@ const AdminDashboard = ({ user, onLogout }) => {
   const loadSchoolUsers = async (schoolId) => {
     const result = await SchoolApi.getSchoolUsers(schoolId);
     if (result.success) {
+      // Normalize tab IDs for each user when loading
+      const normalizedUsers = (result.users || []).map(user => ({
+        ...user,
+        enabledTabs: normalizeTabs(user.enabledTabs || [])
+      }));
+      
       setSchoolUsers(prev => ({
         ...prev,
-        [schoolId]: result.users || []
+        [schoolId]: normalizedUsers
       }));
     }
   };
@@ -278,11 +303,13 @@ const AdminDashboard = ({ user, onLogout }) => {
     }
   };
 
-const handleCustomizeUserTabs = (user, school) => {
-  setSelectedUserForTabs({ user, school });
-  setTempSelectedTabs(user.enabledTabs || []); // ← This line is critical
-  setShowTabConfig(true);
-};
+  const handleCustomizeUserTabs = (user, school) => {
+    // Normalize tabs when opening the configuration modal
+    const normalizedTabs = normalizeTabs(user.enabledTabs || []);
+    setSelectedUserForTabs({ user, school });
+    setTempSelectedTabs(normalizedTabs);
+    setShowTabConfig(true);
+  };
 
   const toggleSchoolExpand = (schoolId) => {
     setExpandedSchools(prev => ({
@@ -304,12 +331,15 @@ const handleCustomizeUserTabs = (user, school) => {
     }
   };
 
-   const saveUserTabConfig = async () => {
+  const saveUserTabConfig = async () => {
     if (!selectedUserForTabs) return;
+    
+    // Normalize tabs before saving to ensure consistency
+    const normalizedTabs = normalizeTabs(tempSelectedTabs);
     
     const result = await SchoolApi.updateUserTabConfig(
       selectedUserForTabs.user.uid, 
-      tempSelectedTabs
+      normalizedTabs
     );
     
     if (result.success) {
@@ -428,28 +458,28 @@ const handleCustomizeUserTabs = (user, school) => {
                             <div className="flex items-center gap-3">
                               <h3 className="text-xl font-bold text-gray-800">{school.name}</h3>
                               <button
-  onClick={() => toggleSchoolExpand(school.schoolId)}
-  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all duration-200 ${
-    expandedSchools[school.schoolId] 
-      ? 'bg-amber-500 text-white hover:bg-amber-600 shadow-md' 
-      : 'bg-amber-100 text-amber-700 hover:bg-amber-200'
-  }`}
-  title={expandedSchools[school.schoolId] ? "Collapse users" : "Expand users"}
->
-  {expandedSchools[school.schoolId] ? (
-    <>
-      <ChevronUp size={18} />
-      <span className="text-sm font-medium">Hide Users</span>
-    </>
-  ) : (
-    <>
-      <ChevronDown size={18} />
-      <span className="text-sm font-medium">
-        Show Users ({schoolUsers[school.schoolId]?.filter(user => user.role !== 'school_admin').length || 0})
-      </span>
-    </>
-  )}
-</button>
+                                onClick={() => toggleSchoolExpand(school.schoolId)}
+                                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all duration-200 ${
+                                  expandedSchools[school.schoolId] 
+                                    ? 'bg-amber-500 text-white hover:bg-amber-600 shadow-md' 
+                                    : 'bg-amber-100 text-amber-700 hover:bg-amber-200'
+                                }`}
+                                title={expandedSchools[school.schoolId] ? "Collapse users" : "Expand users"}
+                              >
+                                {expandedSchools[school.schoolId] ? (
+                                  <>
+                                    <ChevronUp size={18} />
+                                    <span className="text-sm font-medium">Hide Users</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <ChevronDown size={18} />
+                                    <span className="text-sm font-medium">
+                                      Show Users ({schoolUsers[school.schoolId]?.filter(user => user.role !== 'school_admin').length || 0})
+                                    </span>
+                                  </>
+                                )}
+                              </button>
                             </div>
                             <p className="text-gray-600 text-sm">
                               ID: {school.schoolId} • Created: {school.createdAt}
@@ -582,95 +612,95 @@ const handleCustomizeUserTabs = (user, school) => {
                           </div>
 
                           {(!schoolUsers[school.schoolId] || schoolUsers[school.schoolId].filter(user => user.role !== 'school_admin').length === 0) ? (
-  <div className="text-center py-8 bg-white rounded-lg border border-dashed border-gray-300">
-    <Users className="mx-auto text-gray-400 mb-2" size={32} />
-    <p className="text-gray-500">No regular users added yet</p>
-    <button
-      onClick={() => {
-        setSelectedSchoolForUser(school);
-        setShowAddUser(true);
-      }}
-      className="mt-2 text-sm text-blue-600 hover:text-blue-800"
-    >
-      Click here to add a user
-    </button>
-  </div>
-) : (
-  <div className="space-y-3">
-    {schoolUsers[school.schoolId]
-      .filter(user => user.role !== 'school_admin') // Filter out school admin
-      .map((user) => (
-        <div key={user.uid} className="bg-white rounded-lg p-4 border border-gray-200 hover:shadow-sm transition-shadow">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-1">
-                <User size={16} className="text-blue-500" />
-                <p className="font-semibold text-gray-800 text-2xl">{user.name}</p>
-                <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
-                  {user.role === 'school_admin' ? 'School Admin' : (user.fullAccess ? 'Full Access' : 'Limited Access')}
-                </span>
-                {user.enabledTabs && user.enabledTabs.length > 0 && (
-    <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">
-      {user.enabledTabs.length} tabs enabled
-    </span>
-  )}
-              </div>
-              <p className="text-sm text-gray-600 break-all">{user.email}</p>
-              {user.createdAt && (
-                <p className="text-xs text-gray-400 mt-1">
-                  Created: {new Date(user.createdAt).toLocaleDateString()}
-                </p>
-              )}
-            </div>
-            <div className="flex items-center gap-2">
-              {/* Customize Tabs Button - Only for regular users */}
-              <button
-                onClick={() => handleCustomizeUserTabs(user, school)}
-                className="px-3 py-1.5 bg-purple-50 text-purple-700 rounded-lg hover:bg-purple-100 flex items-center gap-1 text-sm transition-colors"
-                title="Customize User Tabs"
-              >
-                <Settings size={14} />
-                <span>Tabs</span>
-              </button>
-              <button
-                onClick={() => handleResetPassword(school, true, user)}
-                className="px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 flex items-center gap-1 text-sm transition-colors"
-                title="Reset User Password"
-              >
-                <Key size={14} />
-                <span>Reset</span>
-              </button>
-              <button
-                onClick={() => {
-                  setSelectedCredentials({
-                    name: user.name,
-                    email: user.email,
-                    role: user.role === 'school_admin' ? 'School Admin' : (user.fullAccess ? 'Full Access User' : 'Limited Access User'),
-                    schoolId: school.schoolId,
-                    createdAt: user.createdAt,
-                  });
-                  setShowCredentials(true);
-                }}
-                className="px-3 py-1.5 border border-amber-300 text-amber-700 rounded-lg hover:bg-amber-50 flex items-center gap-1 text-sm transition-colors"
-                title="View User Info"
-              >
-                <Eye size={14} />
-                <span>Info</span>
-              </button>
-              <button
-                onClick={() => handleDeleteUser(user.uid, user.name)}
-                className="px-3 py-1.5 bg-red-50 text-red-700 rounded-lg hover:bg-red-100 flex items-center gap-1 text-sm transition-colors"
-                title="Delete User"
-              >
-                <Trash2 size={14} />
-                <span>Delete</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      ))}
-  </div>
-)}
+                            <div className="text-center py-8 bg-white rounded-lg border border-dashed border-gray-300">
+                              <Users className="mx-auto text-gray-400 mb-2" size={32} />
+                              <p className="text-gray-500">No regular users added yet</p>
+                              <button
+                                onClick={() => {
+                                  setSelectedSchoolForUser(school);
+                                  setShowAddUser(true);
+                                }}
+                                className="mt-2 text-sm text-blue-600 hover:text-blue-800"
+                              >
+                                Click here to add a user
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="space-y-3">
+                              {schoolUsers[school.schoolId]
+                                .filter(user => user.role !== 'school_admin')
+                                .map((user) => (
+                                  <div key={user.uid} className="bg-white rounded-lg p-4 border border-gray-200 hover:shadow-sm transition-shadow">
+                                    <div className="flex flex-wrap items-center justify-between gap-4">
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2 mb-1">
+                                          <User size={16} className="text-blue-500" />
+                                          <p className="font-semibold text-gray-800 text-2xl">{user.name}</p>
+                                          <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
+                                            {user.role === 'school_admin' ? 'School Admin' : (user.fullAccess ? 'Full Access' : 'Limited Access')}
+                                          </span>
+                                          {user.enabledTabs && user.enabledTabs.length > 0 && (
+                                            <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">
+                                              {user.enabledTabs.length} tabs enabled
+                                            </span>
+                                          )}
+                                        </div>
+                                        <p className="text-sm text-gray-600 break-all">{user.email}</p>
+                                        {user.createdAt && (
+                                          <p className="text-xs text-gray-400 mt-1">
+                                            Created: {new Date(user.createdAt).toLocaleDateString()}
+                                          </p>
+                                        )}
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        {/* Customize Tabs Button - Only for regular users */}
+                                        <button
+                                          onClick={() => handleCustomizeUserTabs(user, school)}
+                                          className="px-3 py-1.5 bg-purple-50 text-purple-700 rounded-lg hover:bg-purple-100 flex items-center gap-1 text-sm transition-colors"
+                                          title="Customize User Tabs"
+                                        >
+                                          <Settings size={14} />
+                                          <span>Tabs</span>
+                                        </button>
+                                        <button
+                                          onClick={() => handleResetPassword(school, true, user)}
+                                          className="px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 flex items-center gap-1 text-sm transition-colors"
+                                          title="Reset User Password"
+                                        >
+                                          <Key size={14} />
+                                          <span>Reset</span>
+                                        </button>
+                                        <button
+                                          onClick={() => {
+                                            setSelectedCredentials({
+                                              name: user.name,
+                                              email: user.email,
+                                              role: user.role === 'school_admin' ? 'School Admin' : (user.fullAccess ? 'Full Access User' : 'Limited Access User'),
+                                              schoolId: school.schoolId,
+                                              createdAt: user.createdAt,
+                                            });
+                                            setShowCredentials(true);
+                                          }}
+                                          className="px-3 py-1.5 border border-amber-300 text-amber-700 rounded-lg hover:bg-amber-50 flex items-center gap-1 text-sm transition-colors"
+                                          title="View User Info"
+                                        >
+                                          <Eye size={14} />
+                                          <span>Info</span>
+                                        </button>
+                                        <button
+                                          onClick={() => handleDeleteUser(user.uid, user.name)}
+                                          className="px-3 py-1.5 bg-red-50 text-red-700 rounded-lg hover:bg-red-100 flex items-center gap-1 text-sm transition-colors"
+                                          title="Delete User"
+                                        >
+                                          <Trash2 size={14} />
+                                          <span>Delete</span>
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                            </div>
+                          )}
                           
                         </div>
                       </div>
@@ -848,7 +878,7 @@ const handleCustomizeUserTabs = (user, school) => {
       )}
 
       {/* User Tab Configuration Modal */}
-       {showTabConfig && selectedUserForTabs && (
+      {showTabConfig && selectedUserForTabs && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <div className="p-6">
@@ -931,6 +961,7 @@ const handleCustomizeUserTabs = (user, school) => {
           </div>
         </div>
       )}
+
       {/* Credentials Modal */}
       {showCredentials && selectedCredentials && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
