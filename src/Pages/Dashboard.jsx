@@ -1,6 +1,6 @@
 // src/components/dashboard/Dashboard.jsx
 import React, { useState, useEffect, useCallback } from 'react';
-import { LogOut, Users, UserPlus, List, BarChart3, Search, DollarSign, Award, Ticket, School, MapPin, Award as AwardIcon, Edit, X, Save, Loader, Building } from 'lucide-react';
+import { LogOut, Users, UserPlus, List, BarChart3, Search, DollarSign, Award, Ticket, School, MapPin, Award as AwardIcon, Edit, X, Save, Loader, Building, Mail, Phone } from 'lucide-react';
 import StudentList from '../Components/StudentList';
 import AllStudents from '../Components/AllStudents';
 import AddStudent from '../Components/AddStudents';
@@ -25,7 +25,9 @@ const Dashboard = ({ user, onLogout }) => {
   const [schoolInfo, setSchoolInfo] = useState({
     schoolName: '',
     schoolAddress: '',
-    schoolAffiliation: ''
+    schoolAffiliation: '',
+    schoolEmail: '',
+    schoolPhone: ''
   });
   const [isSchoolInfoLoading, setIsSchoolInfoLoading] = useState(true);
   
@@ -34,23 +36,40 @@ const Dashboard = ({ user, onLogout }) => {
   const [editingSchoolInfo, setEditingSchoolInfo] = useState({
     schoolName: '',
     schoolAddress: '',
-    schoolAffiliation: ''
+    schoolAffiliation: '',
+    schoolEmail: '',
+    schoolPhone: ''
   });
   const [isSavingSchoolInfo, setIsSavingSchoolInfo] = useState(false);
 
   const navigate = useNavigate();
 
-  // Load school info
+  // Load school info with debug logging
   const loadSchoolInfo = useCallback(async () => {
     setIsSchoolInfoLoading(true);
+    console.log('🔄 Loading school info...');
     try {
       const result = await StudentApi.getSchoolInfo();
+      console.log('📊 Load school info result:', result);
+      
       if (result.success && result.data) {
+        console.log('✅ Setting school info:', result.data);
         setSchoolInfo(result.data);
         setEditingSchoolInfo(result.data);
+      } else {
+        console.warn('⚠️ No school data found, using defaults');
+        const defaultData = {
+          schoolName: '',
+          schoolAddress: '',
+          schoolAffiliation: '',
+          schoolEmail: '',
+          schoolPhone: ''
+        };
+        setSchoolInfo(defaultData);
+        setEditingSchoolInfo(defaultData);
       }
     } catch (error) {
-      console.error('Error loading school info:', error);
+      console.error('❌ Error loading school info:', error);
     } finally {
       setIsSchoolInfoLoading(false);
     }
@@ -102,14 +121,9 @@ const Dashboard = ({ user, onLogout }) => {
 
       if (result.success) {
         toast.success('Student added successfully!');
-
-        // Switch to all students tab
         setActiveTab('allStudents');
-
-        // Refresh immediately without delay
         await refreshStudents();
 
-        // Optionally scroll to the newly added student
         setTimeout(() => {
           const newStudentElement = document.getElementById(`student-${result.studentId}`);
           if (newStudentElement) {
@@ -137,7 +151,7 @@ const Dashboard = ({ user, onLogout }) => {
       const result = await StudentApi.deleteStudent(studentId);
       if (result.success) {
         toast.success('Student deleted successfully');
-        await refreshStudents(); // Refresh immediately
+        await refreshStudents();
         if (selectedStudent?.studentId === studentId) {
           setSelectedStudent(null);
         }
@@ -181,30 +195,36 @@ const Dashboard = ({ user, onLogout }) => {
     setEditingSchoolInfo({ ...editingSchoolInfo, [field]: value });
   };
 
-  const handleSaveSchoolInfo = async () => {
-    if (!editingSchoolInfo.schoolName.trim()) {
-      toast.error('School name is required');
-      return;
-    }
+  // In Dashboard.jsx - Replace the handleSaveSchoolInfo function
 
-    setIsSavingSchoolInfo(true);
-    try {
-      const result = await StudentApi.saveSchoolInfo(editingSchoolInfo);
-      if (result.success) {
-        toast.success('School information saved successfully!');
-        setSchoolInfo(result.data);
-        setIsSchoolInfoModalOpen(false);
-      } else {
-        throw new Error(result.error || 'Failed to save school info');
-      }
-    } catch (error) {
-      console.error('Error saving school info:', error);
-      toast.error(error.message || 'Failed to save school information');
-    } finally {
-      setIsSavingSchoolInfo(false);
-    }
-  };
+const handleSaveSchoolInfo = async () => {
+  if (!editingSchoolInfo.schoolName?.trim()) {
+    toast.error('School name is required');
+    return;
+  }
 
+  setIsSavingSchoolInfo(true);
+  try {
+    const result = await StudentApi.saveSchoolInfo(editingSchoolInfo);
+    
+    if (result.success && result.data) {
+      toast.success('School information saved successfully!');
+      setSchoolInfo(result.data);
+      setEditingSchoolInfo(result.data);
+      setIsSchoolInfoModalOpen(false);
+
+      // Immediate re-fetch to confirm
+      setTimeout(() => loadSchoolInfo(), 300);
+    } else {
+      throw new Error(result.error || 'Save failed');
+    }
+  } catch (error) {
+    console.error('❌ Save failed:', error);
+    toast.error(error.message || 'Failed to save school info');
+  } finally {
+    setIsSavingSchoolInfo(false);
+  }
+};
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100">
       {/* Header with School Info */}
@@ -219,9 +239,9 @@ const Dashboard = ({ user, onLogout }) => {
                 </div>
                 <div>
                   <h1 className="text-2xl font-bold text-white">
-                    {isSchoolInfoLoading ? 'Loading...' : schoolInfo.schoolName || 'School Name'}
+                    {isSchoolInfoLoading ? 'Loading...' : (schoolInfo.schoolName || 'School Name')}
                   </h1>
-                  <div className="flex flex-wrap items-center space-x-3 text-xs">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
                     {schoolInfo.schoolAffiliation && (
                       <span className="flex items-center space-x-1 text-amber-100">
                         <AwardIcon size={12} />
@@ -233,7 +253,25 @@ const Dashboard = ({ user, onLogout }) => {
                         <span className="text-amber-300/50">|</span>
                         <span className="flex items-center space-x-1 text-amber-200/80">
                           <MapPin size={12} />
-                          <span>{schoolInfo.schoolAddress}</span>
+                          <span className="truncate max-w-[150px]">{schoolInfo.schoolAddress}</span>
+                        </span>
+                      </>
+                    )}
+                    {schoolInfo.schoolEmail && (
+                      <>
+                        <span className="text-amber-300/50">|</span>
+                        <span className="flex items-center space-x-1 text-amber-200/80">
+                          <Mail size={12} />
+                          <span className="truncate max-w-[150px]">{schoolInfo.schoolEmail}</span>
+                        </span>
+                      </>
+                    )}
+                    {schoolInfo.schoolPhone && (
+                      <>
+                        <span className="text-amber-300/50">|</span>
+                        <span className="flex items-center space-x-1 text-amber-200/80">
+                          <Phone size={12} />
+                          <span>{schoolInfo.schoolPhone}</span>
                         </span>
                       </>
                     )}
@@ -244,7 +282,20 @@ const Dashboard = ({ user, onLogout }) => {
             
             {/* Right Side - Action Buttons */}
             <div className="flex items-center space-x-3">
-              {/* School Info Edit Button - Purple Color */}
+              {/* Refresh Button */}
+              <button
+                onClick={loadSchoolInfo}
+                className="flex items-center space-x-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded-xl transition-all duration-300 text-white text-sm font-medium shadow-lg hover:shadow-xl"
+                title="Refresh School Information"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="23 4 23 10 17 10"/>
+                  <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                </svg>
+                <span>Refresh</span>
+              </button>
+
+              {/* School Info Edit Button */}
               <button
                 onClick={openSchoolInfoModal}
                 className="flex items-center space-x-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-xl transition-all duration-300 text-white text-sm font-medium shadow-lg hover:shadow-xl"
@@ -268,7 +319,7 @@ const Dashboard = ({ user, onLogout }) => {
         </div>
       </header>
 
-      {/* Navigation Tabs */}
+      {/* Navigation Tabs - same as before */}
       <div className="border-b border-gray-200 bg-white shadow-sm overflow-x-auto">
         <div className="px-6">
           <nav className="flex space-x-4 md:space-x-8 min-w-max">
@@ -374,7 +425,6 @@ const Dashboard = ({ user, onLogout }) => {
               )}
             </button>
 
-
             <button
               onClick={() => setActiveTab('assessment')}
               className={`px-3 py-4 font-medium text-sm transition-all relative whitespace-nowrap ${
@@ -425,8 +475,7 @@ const Dashboard = ({ user, onLogout }) => {
                 <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-amber-600"></div>
               )}
             </button>
-
-                      </nav>
+          </nav>
         </div>
       </div>
 
@@ -544,6 +593,36 @@ const Dashboard = ({ user, onLogout }) => {
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition" 
                   />
                 </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <span className="flex items-center gap-2">
+                      <Mail size={16} /> School Email
+                    </span>
+                  </label>
+                  <input 
+                    type="email" 
+                    value={editingSchoolInfo.schoolEmail} 
+                    onChange={(e) => handleSchoolInfoChange('schoolEmail', e.target.value)} 
+                    placeholder="Enter school email address" 
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition" 
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <span className="flex items-center gap-2">
+                      <Phone size={16} /> School Phone
+                    </span>
+                  </label>
+                  <input 
+                    type="tel" 
+                    value={editingSchoolInfo.schoolPhone} 
+                    onChange={(e) => handleSchoolInfoChange('schoolPhone', e.target.value)} 
+                    placeholder="Enter school phone number" 
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition" 
+                  />
+                </div>
               </div>
 
               <div className="mt-6 flex justify-end space-x-3 pt-4 border-t">
@@ -577,7 +656,7 @@ const Dashboard = ({ user, onLogout }) => {
       )}
 
       {/* Add some CSS for highlighting new students */}
-      <style jsx>{`
+      <style>{`
         .highlight-new-student {
           animation: highlight 3s ease-out;
         }

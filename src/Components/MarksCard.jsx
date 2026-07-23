@@ -434,7 +434,7 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
   };
 
   // Generate Marks Card HTML with exam type filter
-  const getMarksCardHTML = (student, examType = null) => {
+   const getMarksCardHTML = (student, examType = null) => {
     if (!student) return '';
     
     const basicInfo = student.basicInfo || {};
@@ -493,35 +493,43 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
             border-radius: 8px;
           }
           .school-name { 
-  text-align: center; 
-  font-size: 26px; 
-  font-weight: 700; 
-  color: #2c3e50;
-  letter-spacing: 1.5px;
-  text-transform: uppercase;
-  margin-bottom: 5px;
-}
+            text-align: center; 
+            font-size: 26px; 
+            font-weight: 700; 
+            color: #2c3e50;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            margin-bottom: 5px;
+          }
           .school-details {
             text-align: center;
             font-size: 13px;
             color: #24415f;
             margin-bottom: 15px;
           }
+          .school-details .detail-item {
+            display: inline-block;
+            margin: 0 8px;
+          }
+          .school-details .separator {
+            color: #8899aa;
+            margin: 0 4px;
+          }
           .title-underline {
-  border: none;
-   border-top: 7px solid #1a2a3a;
-  margin: 10px auto 20px auto;
-  width: 100%;
-}
-.title { 
-  text-align: center; 
-  font-size: 24px; 
-  font-weight: 700; 
-  color: #2c3e50;
-  margin: 15px 0 5px 0;
-  letter-spacing: 4px;
-  text-transform: uppercase;
-}
+            border: none;
+            border-top: 7px solid #1a2a3a;
+            margin: 10px auto 20px auto;
+            width: 100%;
+          }
+          .title { 
+            text-align: center; 
+            font-size: 24px; 
+            font-weight: 700; 
+            color: #2c3e50;
+            margin: 15px 0 5px 0;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+          }
           .exam-filter-badge {
             text-align: center;
             font-size: 14px;
@@ -806,24 +814,24 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
             color: #7a8a9a;
             font-style: italic;
           }
-            
         </style>
       </head>
       <body>
         <div class="marks-card">
           <div class="watermark">PERFORMANCE REPORT</div>
           
-         <div class="school-name">${escapeHtml(schoolName)}</div>
-<div class="school-details">
-  Phone: ${escapeHtml(schoolInfo.schoolPhone || '')} | 
-  Email: ${escapeHtml(schoolInfo.schoolEmail || '')} | 
-  Address: ${escapeHtml(schoolInfo.schoolAddress || '')}
-</div>
+          <div class="school-name">${escapeHtml(schoolName)}</div>
+          <div class="school-details">
+            ${schoolInfo.schoolPhone ? `<span class="detail-item"> ${escapeHtml(schoolInfo.schoolPhone)}</span>` : ''}
+            ${schoolInfo.schoolPhone && schoolInfo.schoolEmail ? `<span class="separator">|</span>` : ''}
+            ${schoolInfo.schoolEmail ? `<span class="detail-item"> ${escapeHtml(schoolInfo.schoolEmail)}</span>` : ''}
+            ${(schoolInfo.schoolPhone || schoolInfo.schoolEmail) && schoolInfo.schoolAddress ? `<span class="separator">|</span>` : ''}
+            ${schoolInfo.schoolAddress ? `<span class="detail-item"> ${escapeHtml(schoolInfo.schoolAddress)}</span>` : ''}
+          </div>
 
-<hr class="title-underline" />
+          <hr class="title-underline" />
 
-<div class="title">Performance Report</div>
-          
+          <div class="title">Performance Report</div>
           
           <div class="student-info">
             <div class="info-item"><span class="info-label">Student Name:</span> <span class="info-value">${escapeHtml(basicInfo.name || 'N/A')}</span></div>
@@ -858,13 +866,11 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
               <div class="exam-card">
                 <div class="exam-card-header">
                   <div class="exam-title-group">
-                    
                     <div>
                       <div class="exam-name">${escapeHtml(exam.examType || 'Examination ' + (index + 1))}</div>
                       <div class="exam-date">${exam.examDate ? escapeHtml(exam.examDate) : ''}</div>
                     </div>
                   </div>
-                 
                 </div>
                 
                 ${subjects && subjects.length > 0 ? `
@@ -890,7 +896,7 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
                         <td>${subMarks}</td>
                         <td>${subTotal}</td>
                         <td>${subPercentage}%</td>
-                        <td><span >${escapeHtml(subGrade)}</span></td>
+                        <td><span>${escapeHtml(subGrade)}</span></td>
                       </tr>
                       `;
                     }).join('')}
@@ -934,7 +940,6 @@ const MarksCard = ({ students: propStudents, onUpdateStudent }) => {
       </html>
     `;
   };
-
   // Download PDF with exam filter
   const downloadPDF = async (student, examType = null) => {
     if (!student) return;
