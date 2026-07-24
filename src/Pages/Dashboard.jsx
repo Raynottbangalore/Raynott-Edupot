@@ -31,6 +31,9 @@ const Dashboard = ({ user, onLogout }) => {
   });
   const [isSchoolInfoLoading, setIsSchoolInfoLoading] = useState(true);
   
+  // NEW: State to share roll numbers between components
+  const [studentHallTicketData, setStudentHallTicketData] = useState({});
+  
   // School Info Modal States
   const [isSchoolInfoModalOpen, setIsSchoolInfoModalOpen] = useState(false);
   const [editingSchoolInfo, setEditingSchoolInfo] = useState({
@@ -43,6 +46,28 @@ const Dashboard = ({ user, onLogout }) => {
   const [isSavingSchoolInfo, setIsSavingSchoolInfo] = useState(false);
 
   const navigate = useNavigate();
+
+  // Function to update hall ticket data from HallTicket component
+  const updateHallTicketData = useCallback((studentId, hallTicketData) => {
+    if (studentId && hallTicketData) {
+      setStudentHallTicketData(prev => ({
+        ...prev,
+        [studentId]: {
+          rollNumber: hallTicketData.rollNumber || '',
+          studentName: hallTicketData.studentName || '',
+          studentClass: hallTicketData.studentClass || '',
+          section: hallTicketData.section || '',
+          ...hallTicketData
+        }
+      }));
+      console.log(`📋 Hall ticket data updated for student ${studentId}:`, hallTicketData);
+    }
+  }, []);
+
+  // Function to get hall ticket data for a student
+  const getHallTicketData = useCallback((studentId) => {
+    return studentHallTicketData[studentId] || null;
+  }, [studentHallTicketData]);
 
   // Load school info with debug logging
   const loadSchoolInfo = useCallback(async () => {
@@ -112,6 +137,49 @@ const Dashboard = ({ user, onLogout }) => {
     }
   }, [activeTab, refreshStudents]);
 
+  // Load hall tickets when switching to MarksCard tab
+  useEffect(() => {
+    if (activeTab === 'marksCard' && students.length > 0) {
+      loadHallTicketsForStudents();
+    }
+  }, [activeTab, students]);
+
+  // Function to load hall tickets for all students
+  const loadHallTicketsForStudents = useCallback(async () => {
+    console.log('🔄 Loading hall tickets for all students...');
+    try {
+      const hallTicketDataMap = {};
+      
+      // Load hall tickets in parallel for better performance
+      const promises = students.map(async (student) => {
+        try {
+          const result = await StudentApi.getHallTicket(student.studentId);
+          if (result.success && result.hallTicket) {
+            const data = result.hallTicket.hallTicketData || {};
+            hallTicketDataMap[student.studentId] = {
+              rollNumber: data.rollNumber || '',
+              studentName: data.studentName || '',
+              studentClass: data.studentClass || '',
+              section: data.section || '',
+              ...data
+            };
+          }
+        } catch (error) {
+          console.log(`No hall ticket found for student ${student.studentId}`);
+        }
+      });
+      
+      await Promise.all(promises);
+      
+      if (Object.keys(hallTicketDataMap).length > 0) {
+        setStudentHallTicketData(hallTicketDataMap);
+        console.log(`✅ Loaded ${Object.keys(hallTicketDataMap).length} hall tickets`);
+      }
+    } catch (error) {
+      console.error('Error loading hall tickets:', error);
+    }
+  }, [students]);
+
   const handleAddStudent = async (newStudentData) => {
     try {
       console.log('Adding student with data:', newStudentData);
@@ -165,7 +233,7 @@ const Dashboard = ({ user, onLogout }) => {
   };
 
   const handleUpdateStudent = async () => {
-    await refreshStudents(); 
+    await refreshStudents();
   };
 
   const handleLogout = async () => {
@@ -195,36 +263,35 @@ const Dashboard = ({ user, onLogout }) => {
     setEditingSchoolInfo({ ...editingSchoolInfo, [field]: value });
   };
 
-  // In Dashboard.jsx - Replace the handleSaveSchoolInfo function
-
-const handleSaveSchoolInfo = async () => {
-  if (!editingSchoolInfo.schoolName?.trim()) {
-    toast.error('School name is required');
-    return;
-  }
-
-  setIsSavingSchoolInfo(true);
-  try {
-    const result = await StudentApi.saveSchoolInfo(editingSchoolInfo);
-    
-    if (result.success && result.data) {
-      toast.success('School information saved successfully!');
-      setSchoolInfo(result.data);
-      setEditingSchoolInfo(result.data);
-      setIsSchoolInfoModalOpen(false);
-
-      // Immediate re-fetch to confirm
-      setTimeout(() => loadSchoolInfo(), 300);
-    } else {
-      throw new Error(result.error || 'Save failed');
+  const handleSaveSchoolInfo = async () => {
+    if (!editingSchoolInfo.schoolName?.trim()) {
+      toast.error('School name is required');
+      return;
     }
-  } catch (error) {
-    console.error('❌ Save failed:', error);
-    toast.error(error.message || 'Failed to save school info');
-  } finally {
-    setIsSavingSchoolInfo(false);
-  }
-};
+
+    setIsSavingSchoolInfo(true);
+    try {
+      const result = await StudentApi.saveSchoolInfo(editingSchoolInfo);
+      
+      if (result.success && result.data) {
+        toast.success('School information saved successfully!');
+        setSchoolInfo(result.data);
+        setEditingSchoolInfo(result.data);
+        setIsSchoolInfoModalOpen(false);
+
+        // Immediate re-fetch to confirm
+        setTimeout(() => loadSchoolInfo(), 300);
+      } else {
+        throw new Error(result.error || 'Save failed');
+      }
+    } catch (error) {
+      console.error('❌ Save failed:', error);
+      toast.error(error.message || 'Failed to save school info');
+    } finally {
+      setIsSavingSchoolInfo(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100">
       {/* Header with School Info */}
@@ -283,7 +350,7 @@ const handleSaveSchoolInfo = async () => {
             {/* Right Side - Action Buttons */}
             <div className="flex items-center space-x-3">
               {/* Refresh Button */}
-              <button
+              {/* <button
                 onClick={loadSchoolInfo}
                 className="flex items-center space-x-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded-xl transition-all duration-300 text-white text-sm font-medium shadow-lg hover:shadow-xl"
                 title="Refresh School Information"
@@ -293,7 +360,7 @@ const handleSaveSchoolInfo = async () => {
                   <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
                 </svg>
                 <span>Refresh</span>
-              </button>
+              </button> */}
 
               {/* School Info Edit Button */}
               <button
@@ -319,7 +386,7 @@ const handleSaveSchoolInfo = async () => {
         </div>
       </header>
 
-      {/* Navigation Tabs - same as before */}
+      {/* Navigation Tabs */}
       <div className="border-b border-gray-200 bg-white shadow-sm overflow-x-auto">
         <div className="px-6">
           <nav className="flex space-x-4 md:space-x-8 min-w-max">
@@ -486,6 +553,9 @@ const handleSaveSchoolInfo = async () => {
             students={students}
             onUpdateStudent={handleUpdateStudent}
             schoolInfo={schoolInfo}
+            hallTicketData={studentHallTicketData}
+            getHallTicketData={getHallTicketData}
+            onRefreshHallTickets={loadHallTicketsForStudents}
           />
         ) : activeTab === 'addStudent' ? (
           <AddStudent
@@ -524,6 +594,7 @@ const handleSaveSchoolInfo = async () => {
             students={students} 
             onUpdateStudent={handleUpdateStudent}
             schoolInfo={schoolInfo}
+            onHallTicketDataUpdate={updateHallTicketData}
           />
         ) : (
           <AllStudents

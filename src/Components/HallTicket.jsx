@@ -5,7 +5,12 @@ import { toast } from 'react-toastify';
 import StudentApi from '../service/StudentApi';
 import html2pdf from 'html2pdf.js';
 
-const HallTicket = ({ students: propStudents, onUpdateStudent }) => {
+const HallTicket = ({ 
+  students: propStudents, 
+  onUpdateStudent, 
+  onHallTicketDataUpdate, // NEW prop
+  schoolInfo: propSchoolInfo 
+}) => {
   const [students, setStudents] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStudent, setSelectedStudent] = useState(null);
@@ -82,6 +87,20 @@ const HallTicket = ({ students: propStudents, onUpdateStudent }) => {
 
   const [hallTicketData, setHallTicketData] = useState(emptyHallTicketData);
 
+  // Function to notify parent about hall ticket data update
+  const notifyHallTicketUpdate = useCallback((studentId, data) => {
+    if (onHallTicketDataUpdate && studentId && data) {
+      onHallTicketDataUpdate(studentId, {
+        rollNumber: data.rollNumber || '',
+        studentName: data.studentName || '',
+        studentClass: data.studentClass || '',
+        section: data.section || '',
+        ...data
+      });
+      console.log(`📤 Notified parent about hall ticket for student ${studentId}`);
+    }
+  }, [onHallTicketDataUpdate]);
+
   // Load students
   useEffect(() => {
     if (propStudents && propStudents.length > 0) {
@@ -95,6 +114,13 @@ const HallTicket = ({ students: propStudents, onUpdateStudent }) => {
   useEffect(() => {
     loadSchoolInfo();
   }, []);
+
+  // Update school info when prop changes
+  useEffect(() => {
+    if (propSchoolInfo) {
+      setSchoolInfo(propSchoolInfo);
+    }
+  }, [propSchoolInfo]);
 
   const loadStudents = async () => {
     setIsLoading(true);
@@ -371,10 +397,13 @@ const HallTicket = ({ students: propStudents, onUpdateStudent }) => {
       const mergedData = mergeWithCommonData(studentSpecificData, commonData);
       setHallTicketData(mergedData);
       
+      // Notify parent about the hall ticket data
+      notifyHallTicketUpdate(selectedStudent.studentId, mergedData);
+      
     } catch (error) {
       console.error('Error refreshing hall ticket data:', error);
     }
-  }, [selectedStudent, commonHallTicketData, mergeWithCommonData]);
+  }, [selectedStudent, commonHallTicketData, mergeWithCommonData, notifyHallTicketUpdate]);
 
   const generateHallTicket = async (student) => {
     if (!student) return;
@@ -414,6 +443,9 @@ const HallTicket = ({ students: propStudents, onUpdateStudent }) => {
           setPhotoPreview(result.hallTicket.imageUrl);
         }
         toast.info('Loaded existing hall ticket');
+        
+        // Notify parent about the hall ticket data
+        notifyHallTicketUpdate(student.studentId, mergedSavedData);
       }
     } catch (error) {
       console.log('No existing hall ticket found');
@@ -500,6 +532,10 @@ const HallTicket = ({ students: propStudents, onUpdateStudent }) => {
         }
         // Update the hall ticket data with saved data
         setHallTicketData(saveData);
+        
+        // Notify parent about the hall ticket data
+        notifyHallTicketUpdate(selectedStudent.studentId, saveData);
+        
         setIsEditModalOpen(false);
         setIsViewModalOpen(true);
       } else {
@@ -805,6 +841,11 @@ const HallTicket = ({ students: propStudents, onUpdateStudent }) => {
         // Update the hall ticket data in state with merged data
         const updatedHallTicketData = mergeWithCommonData(hallTicketData, commonHallTicketData);
         setHallTicketData(updatedHallTicketData);
+        
+        // Notify parent about the hall ticket data update
+        if (selectedStudent) {
+          notifyHallTicketUpdate(selectedStudent.studentId, updatedHallTicketData);
+        }
         
       } else {
         throw new Error(result.error || 'Failed to save common settings');
@@ -1356,6 +1397,9 @@ const HallTicket = ({ students: propStudents, onUpdateStudent }) => {
           setPhotoPreview(result.hallTicket.imageUrl);
         }
         setIsViewModalOpen(true);
+        
+        // Notify parent about the hall ticket data
+        notifyHallTicketUpdate(student.studentId, mergedData);
       } else {
         await generateHallTicket(student);
       }
