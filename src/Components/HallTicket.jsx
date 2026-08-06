@@ -1,6 +1,11 @@
 // src/Components/HallTicket.jsx
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Eye, Edit, Download, Search, X, Save, Printer, Calendar, BookOpen, FileText, User, Loader, Plus, Trash2, ChevronRight, Users, FileDown, School, ArrowLeft, DownloadCloud, Building } from 'lucide-react';
+import { 
+  Eye, Edit, Search, X, Save, Printer, Calendar, BookOpen, 
+  FileText, User, Loader, Plus, Trash2, ChevronRight, Users, 
+  FileDown, School, ArrowLeft, DownloadCloud, Building, AlertCircle,
+  RefreshCw
+} from 'lucide-react';
 import { toast } from 'react-toastify';
 import StudentApi from '../service/StudentApi';
 import html2pdf from 'html2pdf.js';
@@ -8,7 +13,7 @@ import html2pdf from 'html2pdf.js';
 const HallTicket = ({ 
   students: propStudents, 
   onUpdateStudent, 
-  onHallTicketDataUpdate, // NEW prop
+  onHallTicketDataUpdate, 
   schoolInfo: propSchoolInfo 
 }) => {
   const [students, setStudents] = useState([]);
@@ -30,18 +35,18 @@ const HallTicket = ({
   const [currentGrade, setCurrentGrade] = useState('');
   const [currentSection, setCurrentSection] = useState('');
   const [isCommonDataLoaded, setIsCommonDataLoaded] = useState(false);
+  const [quotaStatus, setQuotaStatus] = useState(null);
+  const [isRetrying, setIsRetrying] = useState(false);
+  const [retryMessage, setRetryMessage] = useState('');
   
-  // Store current class/section key for tracking
   const [currentContext, setCurrentContext] = useState({ grade: '', section: '' });
   
-  // School info - common for all classes
   const [schoolInfo, setSchoolInfo] = useState({
     schoolName: '',
     schoolAddress: '',
     schoolAffiliation: '',
   });
   
-  // Common hall ticket data per class/section
   const [commonHallTicketData, setCommonHallTicketData] = useState({
     examTitle: '',
     examType: '',
@@ -57,7 +62,6 @@ const HallTicket = ({
   const [isCommonEditModalOpen, setIsCommonEditModalOpen] = useState(false);
   const [isSchoolInfoEditModalOpen, setIsSchoolInfoEditModalOpen] = useState(false);
 
-  // Ref to track if common settings are being updated
   const isCommonUpdateRef = useRef(false);
 
   const emptyHallTicketData = {
@@ -87,7 +91,24 @@ const HallTicket = ({
 
   const [hallTicketData, setHallTicketData] = useState(emptyHallTicketData);
 
-  // Function to notify parent about hall ticket data update
+  // Monitor quota status
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const status = StudentApi.getQuotaStatus();
+      setQuotaStatus(status);
+      
+      if (status.quotaExceeded) {
+        setRetryMessage(`Quota exceeded. Retry in ${status.timeUntilReset}s`);
+        setIsRetrying(true);
+      } else {
+        setIsRetrying(false);
+        setRetryMessage('');
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, []);
+
   const notifyHallTicketUpdate = useCallback((studentId, data) => {
     if (onHallTicketDataUpdate && studentId && data) {
       onHallTicketDataUpdate(studentId, {
@@ -97,11 +118,46 @@ const HallTicket = ({
         section: data.section || '',
         ...data
       });
-      console.log(`📤 Notified parent about hall ticket for student ${studentId}`);
     }
   }, [onHallTicketDataUpdate]);
 
-  // Load students
+  // Load students with retry
+  const loadStudents = useCallback(async (retry = 0) => {
+    if (isRetrying) return;
+    
+    setIsLoading(true);
+    try {
+      const result = await StudentApi.getAllStudents(false);
+      if (result.success && result.students) {
+        setStudents(result.students);
+        setRetryMessage('');
+      } else {
+        setStudents([]);
+        if (result.error?.includes('quota')) {
+          throw new Error('Quota exceeded');
+        }
+      }
+    } catch (error) {
+      console.error('Error loading students:', error);
+      
+      if (error.message?.includes('quota') && retry < 3) {
+        const delay = Math.pow(2, retry) * 2000;
+        setRetryMessage(`Quota exceeded. Retrying in ${Math.ceil(delay/1000)}s...`);
+        setIsRetrying(true);
+        setTimeout(() => {
+          setIsRetrying(false);
+          loadStudents(retry + 1);
+        }, delay);
+        return;
+      }
+      
+      toast.error('Failed to load students');
+      setStudents([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [isRetrying]);
+
   useEffect(() => {
     if (propStudents && propStudents.length > 0) {
       setStudents(propStudents);
@@ -110,38 +166,10 @@ const HallTicket = ({
     }
   }, [propStudents]);
 
-  // Load school info from database
-  useEffect(() => {
-    loadSchoolInfo();
-  }, []);
-
-  // Update school info when prop changes
-  useEffect(() => {
-    if (propSchoolInfo) {
-      setSchoolInfo(propSchoolInfo);
-    }
-  }, [propSchoolInfo]);
-
-  const loadStudents = async () => {
-    setIsLoading(true);
-    try {
-      const result = await StudentApi.getAllStudents();
-      if (result.success && result.students) {
-        setStudents(result.students);
-      } else {
-        setStudents([]);
-      }
-    } catch (error) {
-      console.error('Error loading students:', error);
-      toast.error('Failed to load students');
-      setStudents([]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Load school info from database
-  const loadSchoolInfo = async () => {
+  // Load school info with retry
+  const loadSchoolInfo = useCallback(async (retry = 0) => {
+    if (isRetrying) return;
+    
     try {
       const result = await StudentApi.getSchoolInfo();
       if (result.success && result.data) {
@@ -149,38 +177,23 @@ const HallTicket = ({
       }
     } catch (error) {
       console.error('Error loading school info:', error);
-    }
-  };
-
-  // Save school info to database
-  const saveSchoolInfo = async () => {
-    try {
-      setIsSaving(true);
-      const result = await StudentApi.saveSchoolInfo(schoolInfo);
-      if (result.success) {
-        toast.success('School information saved successfully!');
-        setIsSchoolInfoEditModalOpen(false);
-        setSchoolInfo(result.data);
-        // Update current hall ticket data if in edit mode
-        if (isEditModalOpen && selectedStudent) {
-          refreshCurrentHallTicketData();
-        }
-        if (isViewModalOpen && selectedStudent) {
-          const mergedData = mergeWithCommonData(hallTicketData);
-          setHallTicketData(mergedData);
-        }
-      } else {
-        throw new Error(result.error || 'Failed to save school info');
+      if (error.message?.includes('quota') && retry < 3) {
+        const delay = Math.pow(2, retry) * 2000;
+        setTimeout(() => loadSchoolInfo(retry + 1), delay);
       }
-    } catch (error) {
-      console.error('Error saving school info:', error);
-      toast.error(error.message || 'Failed to save school information');
-    } finally {
-      setIsSaving(false);
     }
-  };
+  }, [isRetrying]);
 
-  // Get unique classes from students with statistics
+  useEffect(() => {
+    loadSchoolInfo();
+  }, []);
+
+  useEffect(() => {
+    if (propSchoolInfo) {
+      setSchoolInfo(propSchoolInfo);
+    }
+  }, [propSchoolInfo]);
+
   const getGroupedClasses = useCallback(() => {
     if (!students || students.length === 0) {
       return [];
@@ -231,14 +244,12 @@ const HallTicket = ({
     }
   };
 
-  // Helper function to get the storage key for a class/section
   const getStorageKey = useCallback((grade, section) => {
     const normalizedGrade = String(grade || '').trim();
     const normalizedSection = String(section || '').trim().toUpperCase();
     return `hallTicketCommon_${normalizedGrade}_${normalizedSection}`;
   }, []);
 
-  // Enhanced merge function that properly combines common and student data
   const mergeWithCommonData = useCallback((studentData, commonData = commonHallTicketData, schoolData = schoolInfo) => {
     const merged = {
       ...emptyHallTicketData,
@@ -248,11 +259,9 @@ const HallTicket = ({
       ...studentData,
     };
     
-    // Always use common data for exam title and type
     merged.examTitle = commonData.examTitle || studentData.examTitle || '';
     merged.examType = commonData.examType || studentData.examType || '';
     
-    // Always use common data for subjects if available
     if (commonData.subjects && commonData.subjects.length > 0 && commonData.subjects.some(s => s && s.name)) {
       merged.subjects = commonData.subjects;
     } else if (studentData.subjects && studentData.subjects.length > 0) {
@@ -261,7 +270,6 @@ const HallTicket = ({
       merged.subjects = [];
     }
     
-    // Always use common data for instructions if available
     if (commonData.instructions && commonData.instructions.length > 0 && commonData.instructions.some(i => i && i.trim())) {
       merged.instructions = commonData.instructions;
     } else if (studentData.instructions && studentData.instructions.length > 0) {
@@ -270,14 +278,12 @@ const HallTicket = ({
       merged.instructions = [];
     }
     
-    // Use common data for signature fields, but allow student override for teacher signature
     merged.teacherSignature = studentData.teacherSignature || commonData.teacherSignature || "Teacher's Signature";
     merged.principalSignature = commonData.principalSignature || 'Principal';
     merged.principalName = commonData.principalName || '';
     merged.examController = commonData.examController || 'Exam Controller';
     merged.examControllerName = commonData.examControllerName || '';
     
-    // Student-specific fields (always from student data)
     merged.studentName = studentData.studentName || '';
     merged.fatherName = studentData.fatherName || '';
     merged.motherName = studentData.motherName || '';
@@ -292,8 +298,8 @@ const HallTicket = ({
     return merged;
   }, [commonHallTicketData, schoolInfo]);
 
-  // Load common settings for a specific grade and section
-  const loadCommonSettings = useCallback(async (grade, section, forceReload = false) => {
+  // Load common settings with retry
+  const loadCommonSettings = useCallback(async (grade, section, forceReload = false, retry = 0) => {
     if (!grade || !section) return null;
     
     try {
@@ -322,7 +328,6 @@ const HallTicket = ({
       setIsCommonDataLoaded(true);
       setCurrentContext({ grade, section });
       
-      // If edit modal is open, refresh the hall ticket data
       if (isEditModalOpen && selectedStudent) {
         refreshCurrentHallTicketData(commonData);
       }
@@ -330,24 +335,29 @@ const HallTicket = ({
       return commonData;
     } catch (error) {
       console.error('Error loading common data:', error);
+      
+      if (error.message?.includes('quota') && retry < 3) {
+        const delay = Math.pow(2, retry) * 2000;
+        toast.warn(`Quota exceeded. Retrying... (${retry + 1}/3)`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return loadCommonSettings(grade, section, forceReload, retry + 1);
+      }
+      
       setIsCommonDataLoaded(true);
       return null;
     }
   }, [getStorageKey, isEditModalOpen, selectedStudent]);
 
-  // Function to refresh current hall ticket data with latest common settings
-  const refreshCurrentHallTicketData = useCallback(async (commonDataOverride = null) => {
+  const refreshCurrentHallTicketData = useCallback(async (commonDataOverride = null, retry = 0) => {
     if (!selectedStudent) return;
     
     try {
       const commonData = commonDataOverride || commonHallTicketData;
       
-      // Get the saved hall ticket data if exists
       const result = await StudentApi.getHallTicket(selectedStudent.studentId);
       let studentSpecificData = {};
       
       if (result.success && result.hallTicket) {
-        // Merge existing student data with common data
         const existingData = result.hallTicket.hallTicketData || {};
         studentSpecificData = {
           studentName: existingData.studentName || getStudentInfo(selectedStudent, 'fullName'),
@@ -371,13 +381,11 @@ const HallTicket = ({
           instructions: existingData.instructions || [],
         };
         
-        // Update saved hall ticket reference
         setSavedHallTicket(result.hallTicket);
         if (result.hallTicket.imageUrl) {
           setPhotoPreview(result.hallTicket.imageUrl);
         }
       } else {
-        // No existing hall ticket, create from student info
         const className = getStudentInfo(selectedStudent, 'className');
         const section = getStudentInfo(selectedStudent, 'section');
         studentSpecificData = {
@@ -393,15 +401,18 @@ const HallTicket = ({
         };
       }
       
-      // Merge with latest common data
       const mergedData = mergeWithCommonData(studentSpecificData, commonData);
       setHallTicketData(mergedData);
-      
-      // Notify parent about the hall ticket data
       notifyHallTicketUpdate(selectedStudent.studentId, mergedData);
       
     } catch (error) {
       console.error('Error refreshing hall ticket data:', error);
+      
+      if (error.message?.includes('quota') && retry < 3) {
+        const delay = Math.pow(2, retry) * 2000;
+        await new Promise(resolve => setTimeout(resolve, delay));
+        refreshCurrentHallTicketData(commonDataOverride, retry + 1);
+      }
     }
   }, [selectedStudent, commonHallTicketData, mergeWithCommonData, notifyHallTicketUpdate]);
 
@@ -411,7 +422,6 @@ const HallTicket = ({
     const className = getStudentInfo(student, 'className');
     const section = getStudentInfo(student, 'section');
 
-    // Load common settings first
     const commonData = await loadCommonSettings(className, section);
     
     const studentSpecificData = {
@@ -443,8 +453,6 @@ const HallTicket = ({
           setPhotoPreview(result.hallTicket.imageUrl);
         }
         toast.info('Loaded existing hall ticket');
-        
-        // Notify parent about the hall ticket data
         notifyHallTicketUpdate(student.studentId, mergedSavedData);
       }
     } catch (error) {
@@ -456,7 +464,6 @@ const HallTicket = ({
 
   const handleEditHallTicket = () => {
     setIsViewModalOpen(false);
-    // Refresh data before opening edit modal
     if (selectedStudent) {
       const className = getStudentInfo(selectedStudent, 'className');
       const section = getStudentInfo(selectedStudent, 'section');
@@ -492,7 +499,7 @@ const HallTicket = ({
     }
   };
 
-  const handleSaveHallTicket = async () => {
+  const handleSaveHallTicket = async (retry = 0) => {
     if (!selectedStudent) {
       toast.error('No student selected');
       return;
@@ -500,12 +507,10 @@ const HallTicket = ({
 
     setIsSaving(true);
     try {
-      // Ensure we have the latest common data
       const className = getStudentInfo(selectedStudent, 'className');
       const section = getStudentInfo(selectedStudent, 'section');
       const commonData = await loadCommonSettings(className, section);
       
-      // Merge student-specific data with common data
       const mergedData = mergeWithCommonData(hallTicketData, commonData);
       
       const saveData = {
@@ -530,12 +535,8 @@ const HallTicket = ({
         if (result.imageUrl) {
           setPhotoPreview(result.imageUrl);
         }
-        // Update the hall ticket data with saved data
         setHallTicketData(saveData);
-        
-        // Notify parent about the hall ticket data
         notifyHallTicketUpdate(selectedStudent.studentId, saveData);
-        
         setIsEditModalOpen(false);
         setIsViewModalOpen(true);
       } else {
@@ -543,6 +544,14 @@ const HallTicket = ({
       }
     } catch (error) {
       console.error('Error saving hall ticket:', error);
+      
+      if (error.message?.includes('quota') && retry < 3) {
+        const delay = Math.pow(2, retry) * 2000;
+        toast.warn(`Quota exceeded. Retrying in ${Math.ceil(delay/1000)} seconds...`);
+        setTimeout(() => handleSaveHallTicket(retry + 1), delay);
+        return;
+      }
+      
       toast.error(error.message || 'Failed to save hall ticket');
     } finally {
       setIsSaving(false);
@@ -552,7 +561,6 @@ const HallTicket = ({
   const downloadPDF = async (data, photo, studentName) => {
     setIsDownloading(true);
     try {
-      // Ensure we have the latest common data for the download
       const className = data.studentClass || '';
       const section = data.section || '';
       const commonData = await loadCommonSettings(className, section);
@@ -614,7 +622,6 @@ const HallTicket = ({
       let successCount = 0;
       let failCount = 0;
 
-      // Get common settings once for the class
       const grade = selectedSectionData.grade;
       const section = selectedSectionData.section;
       const commonData = await loadCommonSettings(grade, section);
@@ -805,8 +812,8 @@ const HallTicket = ({
     setCommonHallTicketData({ ...commonHallTicketData, instructions: updatedInstructions });
   };
 
-  // Save common data and refresh all views
-  const saveCommonData = async () => {
+  // Save common data with retry
+  const saveCommonData = async (retry = 0) => {
     if (!selectedSectionData) {
       toast.error('No class/section selected');
       return;
@@ -817,32 +824,25 @@ const HallTicket = ({
       const { grade, section } = selectedSectionData;
       const key = getStorageKey(grade, section);
       
-      // Save common settings
       const result = await StudentApi.saveHallTicketSettings(key, commonHallTicketData);
       
       if (result.success) {
         toast.success(`Common settings saved for Grade ${grade} - Section ${section}!`);
         setIsCommonEditModalOpen(false);
-        
-        // IMPORTANT: Reload common settings to ensure consistency
         await loadCommonSettings(grade, section, true);
         
-        // If edit modal is open, refresh the current hall ticket data
         if (isEditModalOpen && selectedStudent) {
           await refreshCurrentHallTicketData(commonHallTicketData);
         }
         
-        // If view modal is open, refresh the view
         if (isViewModalOpen && selectedStudent) {
           const viewData = mergeWithCommonData(hallTicketData, commonHallTicketData);
           setHallTicketData(viewData);
         }
         
-        // Update the hall ticket data in state with merged data
         const updatedHallTicketData = mergeWithCommonData(hallTicketData, commonHallTicketData);
         setHallTicketData(updatedHallTicketData);
         
-        // Notify parent about the hall ticket data update
         if (selectedStudent) {
           notifyHallTicketUpdate(selectedStudent.studentId, updatedHallTicketData);
         }
@@ -852,7 +852,49 @@ const HallTicket = ({
       }
     } catch (error) {
       console.error('Error saving common data:', error);
+      
+      if (error.message?.includes('quota') && retry < 3) {
+        const delay = Math.pow(2, retry) * 2000;
+        toast.warn(`Quota exceeded. Retrying in ${Math.ceil(delay/1000)} seconds...`);
+        setTimeout(() => saveCommonData(retry + 1), delay);
+        return;
+      }
+      
       toast.error(error.message || 'Failed to save common settings');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const saveSchoolInfo = async (retry = 0) => {
+    try {
+      setIsSaving(true);
+      const result = await StudentApi.saveSchoolInfo(schoolInfo);
+      if (result.success) {
+        toast.success('School information saved successfully!');
+        setIsSchoolInfoEditModalOpen(false);
+        setSchoolInfo(result.data);
+        if (isEditModalOpen && selectedStudent) {
+          refreshCurrentHallTicketData();
+        }
+        if (isViewModalOpen && selectedStudent) {
+          const mergedData = mergeWithCommonData(hallTicketData);
+          setHallTicketData(mergedData);
+        }
+      } else {
+        throw new Error(result.error || 'Failed to save school info');
+      }
+    } catch (error) {
+      console.error('Error saving school info:', error);
+      
+      if (error.message?.includes('quota') && retry < 3) {
+        const delay = Math.pow(2, retry) * 2000;
+        toast.warn(`Quota exceeded. Retrying in ${Math.ceil(delay/1000)} seconds...`);
+        setTimeout(() => saveSchoolInfo(retry + 1), delay);
+        return;
+      }
+      
+      toast.error(error.message || 'Failed to save school information');
     } finally {
       setIsSaving(false);
     }
@@ -1307,7 +1349,6 @@ const HallTicket = ({
                   <span class="info-label">Gender</span>
                   <span class="info-value">${escapeHtml(safeData.gender || 'N/A')}</span>
                 </div>
-                
               </div>
             </div>
 
@@ -1397,8 +1438,6 @@ const HallTicket = ({
           setPhotoPreview(result.hallTicket.imageUrl);
         }
         setIsViewModalOpen(true);
-        
-        // Notify parent about the hall ticket data
         notifyHallTicketUpdate(student.studentId, mergedData);
       } else {
         await generateHallTicket(student);
@@ -1518,7 +1557,6 @@ const HallTicket = ({
     setSelectedSectionData(null);
     setViewMode('class');
     setSearchTerm('');
-    // Reset common data when going back
     setCommonHallTicketData({
       examTitle: '',
       examType: '',
@@ -1546,7 +1584,44 @@ const HallTicket = ({
     });
   };
 
-  // Render Class/Section View
+  // Render Quota Status Indicator
+  const renderQuotaStatus = () => {
+    if (!quotaStatus) return null;
+    
+    if (quotaStatus.quotaExceeded) {
+      return (
+        <div className="fixed bottom-4 right-4 bg-red-100 border-2 border-red-400 text-red-700 px-4 py-3 rounded-lg shadow-lg z-50 flex items-center gap-3 animate-pulse">
+          <AlertCircle size={22} className="text-red-500" />
+          <div>
+            <p className="font-semibold">Quota Exceeded</p>
+            <p className="text-sm">Retry in {quotaStatus.timeUntilReset}s</p>
+          </div>
+          <button 
+            onClick={() => {
+              StudentApi.resetQuotaState();
+              loadStudents();
+            }}
+            className="ml-2 px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 text-sm flex items-center gap-1"
+          >
+            <RefreshCw size={14} /> Reset
+          </button>
+        </div>
+      );
+    }
+    
+    if (quotaStatus.requestsInLastMinute > quotaStatus.maxRequestsPerMinute * 0.8) {
+      return (
+        <div className="fixed bottom-4 right-4 bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded-lg shadow-lg z-50 flex items-center gap-2">
+          <AlertCircle size={20} className="text-yellow-500" />
+          <span>Rate limit: {quotaStatus.requestsInLastMinute}/{quotaStatus.maxRequestsPerMinute} req/min</span>
+        </div>
+      );
+    }
+    
+    return null;
+  };
+
+  // Render Class View
   const renderClassView = () => {
     const groups = getGroupedClasses();
     
@@ -1558,6 +1633,12 @@ const HallTicket = ({
           </div>
           <h4 className="text-lg font-semibold text-gray-800 mb-2">No classes found</h4>
           <p className="text-gray-500">Add students to create classes and sections</p>
+          {isRetrying && (
+            <p className="text-amber-600 mt-2 flex items-center justify-center gap-2">
+              <Loader className="animate-spin" size={16} />
+              {retryMessage}
+            </p>
+          )}
         </div>
       );
     }
@@ -1626,6 +1707,7 @@ const HallTicket = ({
       return (
         <div className="flex justify-center items-center py-12">
           <Loader className="animate-spin" size={40} />
+          {isRetrying && <p className="ml-3 text-amber-600">{retryMessage}</p>}
         </div>
       );
     }
@@ -1666,7 +1748,7 @@ const HallTicket = ({
               </button>
               <button
                 onClick={downloadAllHallTickets}
-                disabled={isDownloadingAll || studentCount === 0}
+                disabled={isDownloadingAll || studentCount === 0 || isRetrying}
                 className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isDownloadingAll ? (
@@ -1757,6 +1839,7 @@ const HallTicket = ({
                           onClick={() => viewHallTicket(student)}
                           className="p-2 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg transition-colors"
                           title="View Hall Ticket"
+                          disabled={isRetrying}
                         >
                           <Eye size={18} />
                         </button>
@@ -1764,6 +1847,7 @@ const HallTicket = ({
                           onClick={() => editHallTicket(student)}
                           className="p-2 text-green-600 hover:text-green-800 hover:bg-green-50 rounded-lg transition-colors"
                           title="Edit Hall Ticket"
+                          disabled={isRetrying}
                         >
                           <Edit size={18} />
                         </button>
@@ -1771,7 +1855,7 @@ const HallTicket = ({
                           onClick={() => handleDirectPDFDownload(student)}
                           className="p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors"
                           title="Download PDF"
-                          disabled={isDownloading}
+                          disabled={isDownloading || isRetrying}
                         >
                           <FileDown size={18} />
                         </button>
@@ -1795,13 +1879,41 @@ const HallTicket = ({
     pendingHallTickets: students?.length || 0
   };
 
+  // ────────────────────────────────────────────────
+  // MAIN RENDER
+  // ────────────────────────────────────────────────
+
   return (
     <div className="p-6">
+      {/* Quota Status Indicator */}
+      {renderQuotaStatus()}
+      
       {viewMode === 'class' ? (
         <>
           <div className="mb-6">
-            <h2 className="text-2xl font-bold text-gray-800">Hall Ticket Management</h2>
-            <p className="text-gray-600 mt-1">Create and manage hall tickets for students - Organized by Class and Section</p>
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-800">Hall Ticket Management</h2>
+                <p className="text-gray-600 mt-1">Create and manage hall tickets for students - Organized by Class and Section</p>
+              </div>
+              <button
+                onClick={() => {
+                  StudentApi.resetQuotaState();
+                  loadStudents();
+                }}
+                className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors flex items-center gap-2"
+                disabled={isLoading}
+              >
+                <RefreshCw size={18} className={isLoading ? 'animate-spin' : ''} />
+                <span>Refresh</span>
+              </button>
+            </div>
+            {isRetrying && (
+              <div className="mt-2 text-amber-600 flex items-center gap-2">
+                <Loader className="animate-spin" size={16} />
+                <span>{retryMessage}</span>
+              </div>
+            )}
           </div>
           
           <div>
@@ -1810,11 +1922,17 @@ const HallTicket = ({
                 Classes & Sections
                 <span className="ml-2 text-sm font-normal text-gray-500">({summary.totalClasses} classes)</span>
               </h3>
+              <div className="flex items-center gap-4">
+                <span className="text-sm text-gray-500">
+                  Total Students: {summary.totalStudents}
+                </span>
+              </div>
             </div>
 
             {isLoading ? (
               <div className="flex justify-center items-center py-12">
                 <Loader className="animate-spin" size={40} />
+                {isRetrying && <span className="ml-3 text-amber-600">{retryMessage}</span>}
               </div>
             ) : (
               renderClassView()
@@ -1847,6 +1965,7 @@ const HallTicket = ({
                     onChange={(e) => handleSchoolInfoChange('schoolName', e.target.value)} 
                     placeholder="Enter school name" 
                     className="w-full border border-gray-300 rounded-lg px-3 py-2" 
+                    disabled={isRetrying}
                   />
                 </div>
                 <div>
@@ -1857,6 +1976,7 @@ const HallTicket = ({
                     onChange={(e) => handleSchoolInfoChange('schoolAddress', e.target.value)} 
                     placeholder="Enter school address" 
                     className="w-full border border-gray-300 rounded-lg px-3 py-2" 
+                    disabled={isRetrying}
                   />
                 </div>
                 <div>
@@ -1867,6 +1987,7 @@ const HallTicket = ({
                     onChange={(e) => handleSchoolInfoChange('schoolAffiliation', e.target.value)} 
                     placeholder="e.g., Affiliated to CBSE" 
                     className="w-full border border-gray-300 rounded-lg px-3 py-2" 
+                    disabled={isRetrying}
                   />
                 </div>
               </div>
@@ -1875,12 +1996,13 @@ const HallTicket = ({
                 <button 
                   onClick={() => setIsSchoolInfoEditModalOpen(false)} 
                   className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400"
+                  disabled={isSaving}
                 >
                   Cancel
                 </button>
                 <button 
                   onClick={saveSchoolInfo} 
-                  disabled={isSaving}
+                  disabled={isSaving || isRetrying}
                   className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center space-x-2 disabled:opacity-50"
                 >
                   {isSaving ? (
@@ -1915,7 +2037,7 @@ const HallTicket = ({
             </div>
             <div className="p-6">
               <div className="space-y-6">
-                {/* Exam Information - Only Title and Type */}
+                {/* Exam Information */}
                 <div className="border rounded-lg p-4">
                   <h4 className="text-lg font-semibold mb-4 flex items-center gap-2">
                     <Calendar size={20} /> Exam Information
@@ -1929,6 +2051,7 @@ const HallTicket = ({
                         onChange={(e) => handleCommonFieldChange('examTitle', e.target.value)} 
                         placeholder="e.g., ANNUAL EXAMINATION 2025" 
                         className="w-full border border-gray-300 rounded-lg px-3 py-2" 
+                        disabled={isRetrying}
                       />
                     </div>
                     <div>
@@ -1939,12 +2062,13 @@ const HallTicket = ({
                         onChange={(e) => handleCommonFieldChange('examType', e.target.value)} 
                         placeholder="e.g., Annual Examination" 
                         className="w-full border border-gray-300 rounded-lg px-3 py-2" 
+                        disabled={isRetrying}
                       />
                     </div>
                   </div>
                 </div>
 
-                {/* Subjects - Common */}
+                {/* Subjects */}
                 <div className="border rounded-lg p-4">
                   <div className="flex justify-between items-center mb-4">
                     <h4 className="text-lg font-semibold flex items-center gap-2">
@@ -1953,6 +2077,7 @@ const HallTicket = ({
                     <button 
                       onClick={addCommonSubject} 
                       className="px-3 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-1 text-sm"
+                      disabled={isRetrying}
                     >
                       <Plus size={16} /> Add Subject
                     </button>
@@ -1967,6 +2092,7 @@ const HallTicket = ({
                         <button 
                           onClick={() => removeCommonSubject(index)} 
                           className="text-red-600 hover:text-red-700 text-sm flex items-center gap-1"
+                          disabled={isRetrying}
                         >
                           <Trash2 size={14} /> Remove
                         </button>
@@ -1978,6 +2104,7 @@ const HallTicket = ({
                           value={subject.name || ''} 
                           onChange={(e) => handleCommonSubjectChange(index, 'name', e.target.value)} 
                           className="border border-gray-300 rounded-lg px-3 py-2" 
+                          disabled={isRetrying}
                         />
                         <input 
                           type="text" 
@@ -1985,6 +2112,7 @@ const HallTicket = ({
                           value={subject.code || ''} 
                           onChange={(e) => handleCommonSubjectChange(index, 'code', e.target.value)} 
                           className="border border-gray-300 rounded-lg px-3 py-2" 
+                          disabled={isRetrying}
                         />
                         <input 
                           type="text" 
@@ -1992,6 +2120,7 @@ const HallTicket = ({
                           value={subject.date || ''} 
                           onChange={(e) => handleCommonSubjectChange(index, 'date', e.target.value)} 
                           className="border border-gray-300 rounded-lg px-3 py-2" 
+                          disabled={isRetrying}
                         />
                         <input 
                           type="text" 
@@ -1999,6 +2128,7 @@ const HallTicket = ({
                           value={subject.time || ''} 
                           onChange={(e) => handleCommonSubjectChange(index, 'time', e.target.value)} 
                           className="border border-gray-300 rounded-lg px-3 py-2" 
+                          disabled={isRetrying}
                         />
                         <input 
                           type="text" 
@@ -2006,13 +2136,14 @@ const HallTicket = ({
                           value={subject.invigilatorSignature || ''} 
                           onChange={(e) => handleCommonSubjectChange(index, 'invigilatorSignature', e.target.value)} 
                           className="border border-gray-300 rounded-lg px-3 py-2" 
+                          disabled={isRetrying}
                         />
                       </div>
                     </div>
                   ))}
                 </div>
 
-                {/* Instructions - Common */}
+                {/* Instructions */}
                 <div className="border rounded-lg p-4">
                   <div className="flex justify-between items-center mb-4">
                     <h4 className="text-lg font-semibold flex items-center gap-2">
@@ -2021,6 +2152,7 @@ const HallTicket = ({
                     <button 
                       onClick={addCommonInstruction} 
                       className="px-3 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-1 text-sm"
+                      disabled={isRetrying}
                     >
                       <Plus size={16} /> Add Instruction
                     </button>
@@ -2036,10 +2168,12 @@ const HallTicket = ({
                         onChange={(e) => handleCommonInstructionChange(index, e.target.value)} 
                         className="flex-1 border border-gray-300 rounded-lg px-3 py-2" 
                         placeholder={`Instruction ${index + 1}`} 
+                        disabled={isRetrying}
                       />
                       <button 
                         onClick={() => removeCommonInstruction(index)} 
                         className="text-red-600 hover:text-red-700"
+                        disabled={isRetrying}
                       >
                         <Trash2 size={18} />
                       </button>
@@ -2047,7 +2181,7 @@ const HallTicket = ({
                   ))}
                 </div>
 
-                {/* Signatures - Common */}
+                {/* Signatures */}
                 <div className="border rounded-lg p-4">
                   <h4 className="text-lg font-semibold mb-4">Signatures</h4>
                   <div className="grid grid-cols-2 gap-4">
@@ -2059,6 +2193,7 @@ const HallTicket = ({
                         onChange={(e) => handleCommonFieldChange('teacherSignature', e.target.value)} 
                         placeholder="e.g., Teacher's Signature" 
                         className="w-full border border-gray-300 rounded-lg px-3 py-2" 
+                        disabled={isRetrying}
                       />
                     </div>
                     <div>
@@ -2069,6 +2204,7 @@ const HallTicket = ({
                         onChange={(e) => handleCommonFieldChange('principalSignature', e.target.value)} 
                         placeholder="e.g., Principal" 
                         className="w-full border border-gray-300 rounded-lg px-3 py-2" 
+                        disabled={isRetrying}
                       />
                     </div>
                     <div>
@@ -2079,6 +2215,7 @@ const HallTicket = ({
                         onChange={(e) => handleCommonFieldChange('principalName', e.target.value)} 
                         placeholder="Enter principal's name" 
                         className="w-full border border-gray-300 rounded-lg px-3 py-2" 
+                        disabled={isRetrying}
                       />
                     </div>
                     <div>
@@ -2089,6 +2226,7 @@ const HallTicket = ({
                         onChange={(e) => handleCommonFieldChange('examController', e.target.value)} 
                         placeholder="e.g., Exam Controller" 
                         className="w-full border border-gray-300 rounded-lg px-3 py-2" 
+                        disabled={isRetrying}
                       />
                     </div>
                     <div className="col-span-2">
@@ -2099,6 +2237,7 @@ const HallTicket = ({
                         onChange={(e) => handleCommonFieldChange('examControllerName', e.target.value)} 
                         placeholder="Enter exam controller's name" 
                         className="w-full border border-gray-300 rounded-lg px-3 py-2" 
+                        disabled={isRetrying}
                       />
                     </div>
                   </div>
@@ -2109,12 +2248,13 @@ const HallTicket = ({
                 <button 
                   onClick={() => setIsCommonEditModalOpen(false)} 
                   className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400"
+                  disabled={isSaving}
                 >
                   Cancel
                 </button>
                 <button 
                   onClick={saveCommonData} 
-                  disabled={isSaving} 
+                  disabled={isSaving || isRetrying} 
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2 disabled:opacity-50"
                 >
                   {isSaving ? (
@@ -2154,6 +2294,7 @@ const HallTicket = ({
                 <button 
                   onClick={handleEditHallTicket} 
                   className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                  disabled={isRetrying}
                 >
                   Edit Hall Ticket
                 </button>
@@ -2163,7 +2304,7 @@ const HallTicket = ({
                     downloadPDF(mergedData, photoPreview, selectedStudent?.basicInfo?.name);
                   }} 
                   className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center space-x-2"
-                  disabled={isDownloading}
+                  disabled={isDownloading || isRetrying}
                 >
                   {isDownloading ? (
                     <>
@@ -2180,6 +2321,7 @@ const HallTicket = ({
                 <button 
                   onClick={downloadHallTicket} 
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2"
+                  disabled={isRetrying}
                 >
                   <Printer size={18} />
                   <span>Print</span>
@@ -2206,6 +2348,7 @@ const HallTicket = ({
               {isLoading ? (
                 <div className="flex justify-center items-center py-12">
                   <Loader className="animate-spin" size={40} />
+                  {isRetrying && <span className="ml-3 text-amber-600">{retryMessage}</span>}
                 </div>
               ) : (
                 <div className="space-y-6">
@@ -2335,6 +2478,7 @@ const HallTicket = ({
                           onChange={(e) => handleFieldChange('rollNumber', e.target.value)} 
                           placeholder="Enter roll number" 
                           className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white" 
+                          disabled={isRetrying}
                         />
                       </div>
                       <div>
@@ -2345,6 +2489,7 @@ const HallTicket = ({
                           onChange={(e) => handleFieldChange('examDate', e.target.value)} 
                           placeholder="e.g., March 15, 2025" 
                           className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white" 
+                          disabled={isRetrying}
                         />
                       </div>
                       <div>
@@ -2355,6 +2500,7 @@ const HallTicket = ({
                           onChange={(e) => handleFieldChange('examTime', e.target.value)} 
                           placeholder="e.g., 10:00 AM - 1:00 PM" 
                           className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white" 
+                          disabled={isRetrying}
                         />
                       </div>
                       <div>
@@ -2365,6 +2511,7 @@ const HallTicket = ({
                           onChange={(e) => handleFieldChange('examDuration', e.target.value)} 
                           placeholder="e.g., 3 Hours" 
                           className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white" 
+                          disabled={isRetrying}
                         />
                       </div>
                       <div className="col-span-2">
@@ -2375,6 +2522,7 @@ const HallTicket = ({
                             accept="image/jpeg,image/jpg,image/png,image/gif,image/webp" 
                             onChange={handlePhotoUpload} 
                             className="flex-1 border border-gray-300 rounded-lg px-3 py-2 bg-white" 
+                            disabled={isRetrying}
                           />
                           {photoPreview && <img src={photoPreview} alt="Preview" className="w-12 h-12 object-cover rounded" />}
                         </div>
@@ -2388,6 +2536,7 @@ const HallTicket = ({
                           onChange={(e) => handleFieldChange('teacherSignature', e.target.value)} 
                           placeholder="e.g., Teacher's Signature" 
                           className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white" 
+                          disabled={isRetrying}
                         />
                       </div>
                     </div>
@@ -2499,13 +2648,12 @@ const HallTicket = ({
                     </button>
                   </div>
 
-                  <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                    <p className="text-sm text-yellow-700 flex items-center gap-2">
-                      <span className="font-semibold">ℹ️ Note:</span> 
-                      Subjects, Instructions, Principal, and Exam Controller details are managed in Common Settings. 
-                      Changes there will reflect for all students in this class/section.
-                    </p>
-                  </div>
+                  {isRetrying && (
+                    <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg flex items-center gap-2">
+                      <Loader className="animate-spin text-yellow-600" size={18} />
+                      <p className="text-sm text-yellow-700">{retryMessage}</p>
+                    </div>
+                  )}
                 </div>
               )}
               <div className="mt-6 flex justify-end space-x-3 pt-4 border-t">
@@ -2518,7 +2666,7 @@ const HallTicket = ({
                 </button>
                 <button 
                   onClick={handleSaveHallTicket} 
-                  disabled={isSaving} 
+                  disabled={isSaving || isRetrying} 
                   className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center space-x-2 disabled:opacity-50"
                 >
                   {isSaving ? (
@@ -2538,7 +2686,7 @@ const HallTicket = ({
                     handleSaveHallTicket();
                     setTimeout(() => downloadHallTicket(), 1000);
                   }}
-                  disabled={isSaving}
+                  disabled={isSaving || isRetrying}
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2 disabled:opacity-50"
                 >
                   <Printer size={18} />

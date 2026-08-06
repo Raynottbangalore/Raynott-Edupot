@@ -1,10 +1,22 @@
 // src/services/AuthApi.js
 import { signInWithEmailAndPassword, getIdToken } from 'firebase/auth';
 import { auth } from './firebase';
-import BASE_URL from './base_urls'
+import BASE_URL from './base_urls';
+
+// Import StudentApi to clear token cache on logout
+import StudentApi from './StudentApi';
 
 class AuthApi {
- 
+  // Token cache for login
+  static tokenCache = {
+    token: null,
+    expiry: null,
+    userId: null
+  };
+
+  /**
+   * Login user - WITHOUT force refresh
+   */
   static async login(email, password) {
     try {
       // Validate inputs
@@ -20,7 +32,9 @@ class AuthApi {
       
       // Firebase authentication
       const userCredential = await signInWithEmailAndPassword(auth, trimmedEmail, password);
-      const idToken = await getIdToken(userCredential.user, true);
+      
+      // Get token WITHOUT force refresh - let Firebase handle caching
+      const idToken = await getIdToken(userCredential.user, false);
 
       // Backend authentication
       const response = await fetch(`${BASE_URL}/login`, {
@@ -55,6 +69,11 @@ class AuthApi {
         throw new Error(userMessage);
       }
 
+      // Cache the token
+      this.tokenCache.token = idToken;
+      this.tokenCache.userId = userCredential.user.uid;
+      this.tokenCache.expiry = Date.now() + 3600000; // 1 hour default
+
       // Ensure enabledTabs is always an array
       const user = {
         ...data.user,
@@ -70,7 +89,7 @@ class AuthApi {
       };
 
     } catch (error) {
-      console.error('Login error:', error.code, error.message);
+      console.error('❌ Login error:', error.code, error.message);
       
       // Map Firebase error codes to user-friendly messages
       let errorMessage = error.message || 'Login failed. Please try again.';
@@ -100,10 +119,12 @@ class AuthApi {
             errorMessage = 'This email is already registered. Please use a different email.';
             break;
           case 'auth/invalid-credential':
-            errorMessage = 'Invalid credentials.Please check your email and password.';
+            errorMessage = 'Invalid credentials. Please check your email and password.';
+            break;
+          case 'auth/quota-exceeded':
+            errorMessage = 'Authentication quota exceeded. Please try again in a few minutes.';
             break;
           default:
-            // Keep the original error message if it's user-friendly
             if (!error.message || error.message.includes('Firebase')) {
               errorMessage = 'Login failed. Please try again.';
             }
@@ -118,15 +139,29 @@ class AuthApi {
     }
   }
   
+  /**
+   * Logout - clear all caches
+   */
   static async logout() {
     try {
+      // Clear token caches
+      this.tokenCache.token = null;
+      this.tokenCache.expiry = null;
+      this.tokenCache.userId = null;
+      
+      // Clear StudentApi token cache
+      StudentApi.clearTokenCache();
+      
+      // Sign out from Firebase
       await auth.signOut();
+      
       // Clear any stored user data
       localStorage.removeItem('user');
       localStorage.removeItem('schoolId');
+      
       return { success: true };
     } catch (error) {
-      console.error('Logout error:', error);
+      console.error('❌ Logout error:', error);
       return { 
         success: false, 
         error: error.message || 'Logout failed. Please try again.' 
@@ -134,6 +169,9 @@ class AuthApi {
     }
   }
 
+  /**
+   * Get current user - WITHOUT force refresh
+   */
   static async getCurrentUser() {
     try {
       const user = auth.currentUser;
@@ -141,7 +179,9 @@ class AuthApi {
         return { success: false, error: 'No user logged in' };
       }
 
-      const idToken = await getIdToken(user, true);
+      // Get token WITHOUT force refresh
+      const idToken = await getIdToken(user, false);
+      
       const response = await fetch(`${BASE_URL}/auth/profile`, {
         headers: {
           Authorization: `Bearer ${idToken}`,
@@ -175,7 +215,7 @@ class AuthApi {
       };
       
     } catch (err) {
-      console.error('Get current user failed:', err);
+      console.error('❌ Get current user failed:', err);
       return { 
         success: false, 
         error: err.message || 'Failed to get user profile' 

@@ -1,6 +1,6 @@
 // src/components/dashboard/Dashboard.jsx
 import React, { useState, useEffect, useCallback } from 'react';
-import { LogOut, Users, UserPlus, List, BarChart3, Search, DollarSign, Award, Ticket, School, MapPin, Award as AwardIcon, Edit, X, Save, Loader, Building, Mail, Phone } from 'lucide-react';
+import { LogOut, Users, UserPlus, List, BarChart3, Search, DollarSign, Award, Ticket, School, MapPin, Award as AwardIcon, Edit, X, Save, Loader, Building, Mail, Phone, Calendar } from 'lucide-react';
 import StudentList from '../Components/StudentList';
 import AllStudents from '../Components/AllStudents';
 import AddStudent from '../Components/AddStudents';
@@ -14,6 +14,8 @@ import AssessmentTab from '../Components/AssessmentTab';
 import TeachersAssessment from '../Components/TeachersAssessment';
 import HallTicket from '../Components/HallTicket';
 import MarksCard from '../Components/MarksCard';
+import StudentAttendance from '../Components/StudentAttendance';
+import TeachersAttendance from '../Components/TeachersAttendance';
 
 const Dashboard = ({ user, onLogout }) => {
   const [activeTab, setActiveTab] = useState('search');
@@ -30,10 +32,13 @@ const Dashboard = ({ user, onLogout }) => {
     schoolPhone: ''
   });
   const [isSchoolInfoLoading, setIsSchoolInfoLoading] = useState(true);
-  
-  // NEW: State to share roll numbers between components
+
+  // Hall ticket data state
   const [studentHallTicketData, setStudentHallTicketData] = useState({});
-  
+
+  // ⭐ NEW: Refresh trigger for MarksCard
+  const [refreshMarksCard, setRefreshMarksCard] = useState(0);
+
   // School Info Modal States
   const [isSchoolInfoModalOpen, setIsSchoolInfoModalOpen] = useState(false);
   const [editingSchoolInfo, setEditingSchoolInfo] = useState({
@@ -46,6 +51,12 @@ const Dashboard = ({ user, onLogout }) => {
   const [isSavingSchoolInfo, setIsSavingSchoolInfo] = useState(false);
 
   const navigate = useNavigate();
+
+const handleStudentUpdate = useCallback((updatedStudent) => {
+  setRefreshMarksCard(prev => prev + 1);
+  console.log('🔄 Student updated, triggering MarksCard refresh');
+  refreshStudents();
+}, []);
 
   // Function to update hall ticket data from HallTicket component
   const updateHallTicketData = useCallback((studentId, hallTicketData) => {
@@ -76,7 +87,7 @@ const Dashboard = ({ user, onLogout }) => {
     try {
       const result = await StudentApi.getSchoolInfo();
       console.log('📊 Load school info result:', result);
-      
+
       if (result.success && result.data) {
         console.log('✅ Setting school info:', result.data);
         setSchoolInfo(result.data);
@@ -149,7 +160,7 @@ const Dashboard = ({ user, onLogout }) => {
     console.log('🔄 Loading hall tickets for all students...');
     try {
       const hallTicketDataMap = {};
-      
+
       // Load hall tickets in parallel for better performance
       const promises = students.map(async (student) => {
         try {
@@ -168,9 +179,9 @@ const Dashboard = ({ user, onLogout }) => {
           console.log(`No hall ticket found for student ${student.studentId}`);
         }
       });
-      
+
       await Promise.all(promises);
-      
+
       if (Object.keys(hallTicketDataMap).length > 0) {
         setStudentHallTicketData(hallTicketDataMap);
         console.log(`✅ Loaded ${Object.keys(hallTicketDataMap).length} hall tickets`);
@@ -272,7 +283,7 @@ const Dashboard = ({ user, onLogout }) => {
     setIsSavingSchoolInfo(true);
     try {
       const result = await StudentApi.saveSchoolInfo(editingSchoolInfo);
-      
+
       if (result.success && result.data) {
         toast.success('School information saved successfully!');
         setSchoolInfo(result.data);
@@ -346,22 +357,9 @@ const Dashboard = ({ user, onLogout }) => {
                 </div>
               </div>
             </div>
-            
+
             {/* Right Side - Action Buttons */}
             <div className="flex items-center space-x-3">
-              {/* Refresh Button */}
-              {/* <button
-                onClick={loadSchoolInfo}
-                className="flex items-center space-x-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded-xl transition-all duration-300 text-white text-sm font-medium shadow-lg hover:shadow-xl"
-                title="Refresh School Information"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="23 4 23 10 17 10"/>
-                  <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
-                </svg>
-                <span>Refresh</span>
-              </button> */}
-
               {/* School Info Edit Button */}
               <button
                 onClick={openSchoolInfoModal}
@@ -392,11 +390,10 @@ const Dashboard = ({ user, onLogout }) => {
           <nav className="flex space-x-4 md:space-x-8 min-w-max">
             <button
               onClick={() => setActiveTab('search')}
-              className={`px-3 py-4 font-medium text-sm transition-all relative whitespace-nowrap ${
-                activeTab === 'search'
+              className={`px-3 py-4 font-medium text-sm transition-all relative whitespace-nowrap ${activeTab === 'search'
                   ? 'text-amber-600'
                   : 'text-gray-500 hover:text-gray-700'
-              }`}
+                }`}
             >
               <div className="flex items-center space-x-2">
                 <Search size={16} />
@@ -409,11 +406,10 @@ const Dashboard = ({ user, onLogout }) => {
 
             <button
               onClick={() => setActiveTab('allStudents')}
-              className={`px-3 py-4 font-medium text-sm transition-all relative whitespace-nowrap ${
-                activeTab === 'allStudents'
+              className={`px-3 py-4 font-medium text-sm transition-all relative whitespace-nowrap ${activeTab === 'allStudents'
                   ? 'text-amber-600'
                   : 'text-gray-500 hover:text-gray-700'
-              }`}
+                }`}
             >
               <div className="flex items-center space-x-2">
                 <List size={16} />
@@ -426,11 +422,10 @@ const Dashboard = ({ user, onLogout }) => {
 
             <button
               onClick={() => setActiveTab('addStudent')}
-              className={`px-3 py-4 font-medium text-sm transition-all relative whitespace-nowrap ${
-                activeTab === 'addStudent'
+              className={`px-3 py-4 font-medium text-sm transition-all relative whitespace-nowrap ${activeTab === 'addStudent'
                   ? 'text-amber-600'
                   : 'text-gray-500 hover:text-gray-700'
-              }`}
+                }`}
             >
               <div className="flex items-center space-x-2">
                 <UserPlus size={16} />
@@ -443,11 +438,10 @@ const Dashboard = ({ user, onLogout }) => {
 
             <button
               onClick={() => setActiveTab('fees')}
-              className={`px-3 py-4 font-medium text-sm transition-all relative whitespace-nowrap ${
-                activeTab === 'fees'
+              className={`px-3 py-4 font-medium text-sm transition-all relative whitespace-nowrap ${activeTab === 'fees'
                   ? 'text-amber-600'
                   : 'text-gray-500 hover:text-gray-700'
-              }`}
+                }`}
             >
               <div className="flex items-center space-x-2">
                 <DollarSign size={16} />
@@ -460,11 +454,10 @@ const Dashboard = ({ user, onLogout }) => {
 
             <button
               onClick={() => setActiveTab('marks')}
-              className={`px-3 py-4 font-medium text-sm transition-all relative whitespace-nowrap ${
-                activeTab === 'marks'
+              className={`px-3 py-4 font-medium text-sm transition-all relative whitespace-nowrap ${activeTab === 'marks'
                   ? 'text-amber-600'
                   : 'text-gray-500 hover:text-gray-700'
-              }`}
+                }`}
             >
               <div className="flex items-center space-x-2">
                 <Award size={16} />
@@ -477,11 +470,10 @@ const Dashboard = ({ user, onLogout }) => {
 
             <button
               onClick={() => setActiveTab('marksCard')}
-              className={`px-3 py-4 font-medium text-sm transition-all relative whitespace-nowrap ${
-                activeTab === 'marksCard'
+              className={`px-3 py-4 font-medium text-sm transition-all relative whitespace-nowrap ${activeTab === 'marksCard'
                   ? 'text-amber-600'
                   : 'text-gray-500 hover:text-gray-700'
-              }`}
+                }`}
             >
               <div className="flex items-center space-x-2">
                 <Award size={16} />
@@ -494,11 +486,10 @@ const Dashboard = ({ user, onLogout }) => {
 
             <button
               onClick={() => setActiveTab('assessment')}
-              className={`px-3 py-4 font-medium text-sm transition-all relative whitespace-nowrap ${
-                activeTab === 'assessment'
+              className={`px-3 py-4 font-medium text-sm transition-all relative whitespace-nowrap ${activeTab === 'assessment'
                   ? 'text-amber-600'
                   : 'text-gray-500 hover:text-gray-700'
-              }`}
+                }`}
             >
               <div className="flex items-center space-x-2">
                 <BarChart3 size={16} />
@@ -511,11 +502,10 @@ const Dashboard = ({ user, onLogout }) => {
 
             <button
               onClick={() => setActiveTab('teachers')}
-              className={`px-3 py-4 font-medium text-sm transition-all relative whitespace-nowrap ${
-                activeTab === 'teachers'
+              className={`px-3 py-4 font-medium text-sm transition-all relative whitespace-nowrap ${activeTab === 'teachers'
                   ? 'text-amber-600'
                   : 'text-gray-500 hover:text-gray-700'
-              }`}
+                }`}
             >
               <div className="flex items-center space-x-2">
                 <BarChart3 size={16} />
@@ -528,11 +518,10 @@ const Dashboard = ({ user, onLogout }) => {
 
             <button
               onClick={() => setActiveTab('hallticket')}
-              className={`px-3 py-4 font-medium text-sm transition-all relative whitespace-nowrap ${
-                activeTab === 'hallticket'
+              className={`px-3 py-4 font-medium text-sm transition-all relative whitespace-nowrap ${activeTab === 'hallticket'
                   ? 'text-amber-600'
                   : 'text-gray-500 hover:text-gray-700'
-              }`}
+                }`}
             >
               <div className="flex items-center space-x-2">
                 <Ticket size={16} />
@@ -542,20 +531,57 @@ const Dashboard = ({ user, onLogout }) => {
                 <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-amber-600"></div>
               )}
             </button>
+            <button
+              onClick={() => setActiveTab('studentAttendance')}
+              className={`px-3 py-4 font-medium text-sm transition-all relative whitespace-nowrap ${activeTab === 'studentAttendance'
+                  ? 'text-amber-600'
+                  : 'text-gray-500 hover:text-gray-700'
+                }`}
+            >
+              <div className="flex items-center space-x-2">
+                <Calendar size={16} />
+                <span>Student Attendance</span>
+              </div>
+              {activeTab === 'studentAttendance' && (
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-amber-600"></div>
+              )}
+            </button>
+            <button onClick={() => setActiveTab('teacherAttendance')}
+              className={`px-3 py-4 font-medium text-sm transition-all relative whitespace-nowrap ${activeTab === 'teacherAttendance'
+                  ? 'text-amber-600'
+                  : 'text-gray-500 hover:text-gray-700'
+                }`}
+            >
+              <div className="flex items-center space-x-2">
+                <Users size={16} />
+                <span>Teachers Attendance</span>
+              </div>
+              {activeTab === 'teacherAttendance' && (
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-amber-600"></div>
+              )}
+            </button>
           </nav>
         </div>
       </div>
 
       {/* Main Content */}
       <div className="p-6">
-        {activeTab === 'marksCard' ? (
-          <MarksCard
+        {activeTab === 'studentAttendance' ? (
+          <StudentAttendance
             students={students}
             onUpdateStudent={handleUpdateStudent}
+          />
+        ) : activeTab === 'teacherAttendance' ? (
+          <TeachersAttendance />
+        ) : activeTab === 'marksCard' ? (
+          <MarksCard
+            students={students}
+            onUpdateStudent={handleStudentUpdate}
             schoolInfo={schoolInfo}
             hallTicketData={studentHallTicketData}
             getHallTicketData={getHallTicketData}
             onRefreshHallTickets={loadHallTicketsForStudents}
+            refreshTrigger={refreshMarksCard}  // ⭐ PASS THE REFRESH TRIGGER
           />
         ) : activeTab === 'addStudent' ? (
           <AddStudent
@@ -577,7 +603,7 @@ const Dashboard = ({ user, onLogout }) => {
         ) : activeTab === 'marks' ? (
           <MarksTab
             students={students}
-            onUpdateStudent={handleUpdateStudent}
+            onUpdateStudent={handleStudentUpdate}  // ⭐ PASS THE UPDATE HANDLER
           />
         ) : activeTab === 'assessment' ? (
           <AssessmentTab
@@ -590,8 +616,8 @@ const Dashboard = ({ user, onLogout }) => {
             onUpdateStudent={handleUpdateStudent}
           />
         ) : activeTab === 'hallticket' ? (
-          <HallTicket 
-            students={students} 
+          <HallTicket
+            students={students}
             onUpdateStudent={handleUpdateStudent}
             schoolInfo={schoolInfo}
             onHallTicketDataUpdate={updateHallTicketData}
@@ -616,52 +642,52 @@ const Dashboard = ({ user, onLogout }) => {
               <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
                 <Building size={24} /> School Information
               </h3>
-              <button 
-                onClick={closeSchoolInfoModal} 
+              <button
+                onClick={closeSchoolInfoModal}
                 className="text-gray-500 hover:text-gray-700 transition"
               >
                 <X size={24} />
               </button>
             </div>
-            
+
             <div className="p-6">
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     School Name *
                   </label>
-                  <input 
-                    type="text" 
-                    value={editingSchoolInfo.schoolName} 
-                    onChange={(e) => handleSchoolInfoChange('schoolName', e.target.value)} 
-                    placeholder="Enter school name" 
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition" 
+                  <input
+                    type="text"
+                    value={editingSchoolInfo.schoolName}
+                    onChange={(e) => handleSchoolInfoChange('schoolName', e.target.value)}
+                    placeholder="Enter school name"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition"
                   />
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     School Address
                   </label>
-                  <input 
-                    type="text" 
-                    value={editingSchoolInfo.schoolAddress} 
-                    onChange={(e) => handleSchoolInfoChange('schoolAddress', e.target.value)} 
-                    placeholder="Enter school address" 
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition" 
+                  <input
+                    type="text"
+                    value={editingSchoolInfo.schoolAddress}
+                    onChange={(e) => handleSchoolInfoChange('schoolAddress', e.target.value)}
+                    placeholder="Enter school address"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition"
                   />
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     School Affiliation
                   </label>
-                  <input 
-                    type="text" 
-                    value={editingSchoolInfo.schoolAffiliation} 
-                    onChange={(e) => handleSchoolInfoChange('schoolAffiliation', e.target.value)} 
-                    placeholder="e.g., Affiliated to CBSE" 
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition" 
+                  <input
+                    type="text"
+                    value={editingSchoolInfo.schoolAffiliation}
+                    onChange={(e) => handleSchoolInfoChange('schoolAffiliation', e.target.value)}
+                    placeholder="e.g., Affiliated to CBSE"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition"
                   />
                 </div>
 
@@ -671,12 +697,12 @@ const Dashboard = ({ user, onLogout }) => {
                       <Mail size={16} /> School Email
                     </span>
                   </label>
-                  <input 
-                    type="email" 
-                    value={editingSchoolInfo.schoolEmail} 
-                    onChange={(e) => handleSchoolInfoChange('schoolEmail', e.target.value)} 
-                    placeholder="Enter school email address" 
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition" 
+                  <input
+                    type="email"
+                    value={editingSchoolInfo.schoolEmail}
+                    onChange={(e) => handleSchoolInfoChange('schoolEmail', e.target.value)}
+                    placeholder="Enter school email address"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition"
                   />
                 </div>
 
@@ -686,25 +712,25 @@ const Dashboard = ({ user, onLogout }) => {
                       <Phone size={16} /> School Phone
                     </span>
                   </label>
-                  <input 
-                    type="tel" 
-                    value={editingSchoolInfo.schoolPhone} 
-                    onChange={(e) => handleSchoolInfoChange('schoolPhone', e.target.value)} 
-                    placeholder="Enter school phone number" 
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition" 
+                  <input
+                    type="tel"
+                    value={editingSchoolInfo.schoolPhone}
+                    onChange={(e) => handleSchoolInfoChange('schoolPhone', e.target.value)}
+                    placeholder="Enter school phone number"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition"
                   />
                 </div>
               </div>
 
               <div className="mt-6 flex justify-end space-x-3 pt-4 border-t">
-                <button 
-                  onClick={closeSchoolInfoModal} 
+                <button
+                  onClick={closeSchoolInfoModal}
                   className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition"
                 >
                   Cancel
                 </button>
-                <button 
-                  onClick={handleSaveSchoolInfo} 
+                <button
+                  onClick={handleSaveSchoolInfo}
                   disabled={isSavingSchoolInfo}
                   className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center space-x-2 disabled:opacity-50 transition"
                 >

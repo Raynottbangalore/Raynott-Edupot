@@ -1,17 +1,17 @@
 // src/components/dashboard/components/MarksCard.jsx
-import React, { useState, useMemo, useEffect } from 'react';
-import { Search, X, Download, Loader, Eye, Filter, ChevronDown, RefreshCw } from 'lucide-react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import { Search, X, Download, Loader, Eye, Filter, ChevronDown, RefreshCw, AlertCircle } from 'lucide-react';
 import { toast } from 'react-toastify';
 import html2pdf from 'html2pdf.js';
 import StudentApi from '../service/StudentApi';
-import { useCallback } from 'react';
 
 const MarksCard = ({ 
   students: propStudents, 
   onUpdateStudent,
   hallTicketData: propHallTicketData = {},
   getHallTicketData,
-  onRefreshHallTickets
+  onRefreshHallTickets,
+  refreshTrigger = 0
 }) => {
   const [students, setStudents] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -24,15 +24,11 @@ const MarksCard = ({
   const [isDownloading, setIsDownloading] = useState(false);
   const [filteredStudents, setFilteredStudents] = useState([]);
   
-  // NEW: Hall ticket data
   const [localHallTicketData, setLocalHallTicketData] = useState({});
   
-  // NEW: Exam selection states
   const [selectedExamType, setSelectedExamType] = useState('');
   const [availableExamTypes, setAvailableExamTypes] = useState([]);
-  const [isExamFilterActive, setIsExamFilterActive] = useState(false);
   
-  // View marks card states
   const [isViewMode, setIsViewMode] = useState(true);
   const [viewGrade, setViewGrade] = useState('');
   const [viewSection, setViewSection] = useState('');
@@ -41,7 +37,6 @@ const MarksCard = ({
   const [viewAvailableExamTypes, setViewAvailableExamTypes] = useState([]);
   const [viewHasLoadedStudents, setViewHasLoadedStudents] = useState(false);
   
-  // Download marks card states
   const [isDownloadMode, setIsDownloadMode] = useState(false);
   const [downloadGrade, setDownloadGrade] = useState('');
   const [downloadSection, setDownloadSection] = useState('');
@@ -61,25 +56,24 @@ const MarksCard = ({
     classTeacherName: 'Mr. Ms. Teacher Name',
   });
 
-  // Helper function to get roll number from hall ticket data
+  const isMountedRef = useRef(true);
+  const lastRefreshTimeRef = useRef(0);
+
   const getRollNumber = useCallback((student) => {
     if (!student) return 'N/A';
     
     const studentId = student.studentId;
     
-    // Try to get from prop hall ticket data
     if (propHallTicketData && propHallTicketData[studentId]) {
       const rollNum = propHallTicketData[studentId].rollNumber;
       if (rollNum) return rollNum;
     }
     
-    // Try to get from local hall ticket data
     if (localHallTicketData && localHallTicketData[studentId]) {
       const rollNum = localHallTicketData[studentId].rollNumber;
       if (rollNum) return rollNum;
     }
     
-    // Try callback
     if (getHallTicketData) {
       const data = getHallTicketData(studentId);
       if (data && data.rollNumber) {
@@ -87,12 +81,10 @@ const MarksCard = ({
       }
     }
     
-    // Fallback to student basicInfo
     if (student.basicInfo?.rollNumber) {
       return student.basicInfo.rollNumber;
     }
     
-    // Fallback to generating from studentId
     if (student.studentId) {
       return `ROLL${student.studentId.slice(-6)}`;
     }
@@ -107,37 +99,48 @@ const MarksCard = ({
     }
   }, [propHallTicketData]);
 
-  // Load students with force refresh
-  const loadStudents = async (forceRefresh = true) => {
+  // Handle external refresh trigger
+  useEffect(() => {
+    if (refreshTrigger > 0) {
+      console.log('🔄 External refresh triggered:', refreshTrigger);
+      refreshData();
+    }
+  }, [refreshTrigger]);
+
+  // Load students with proper data fetching
+  const loadStudents = useCallback(async (forceRefresh = true) => {
+    const now = Date.now();
+    if (now - lastRefreshTimeRef.current < 500) {
+      console.log('⏳ Skipping duplicate refresh request');
+      return;
+    }
+    lastRefreshTimeRef.current = now;
+
+    if (!isMountedRef.current) return;
+    
     setIsLoading(true);
     try {
       console.log('🔍 Fetching students with marks...', forceRefresh ? '(FORCE REFRESH)' : '');
       const result = await StudentApi.getAllStudentsWithClassMarks(forceRefresh);
-      console.log('📊 API Response:', result);
+      console.log('📊 API Response received');
       
+      if (!isMountedRef.current) return;
+
       if (result.success && result.students) {
         console.log(`✅ Loaded ${result.students.length} students`);
         
-        // Log detailed marks for each student
-        result.students.forEach((student, index) => {
-          console.log(`📝 Student ${index + 1}: ${student.basicInfo?.name}`);
-          const exams = student.marks?.exams || [];
-          console.log(`   Exams: ${exams.length}`);
-          if (exams.length > 0) {
-            exams.forEach((exam, examIdx) => {
-              console.log(`   Exam ${examIdx + 1}: ${exam.examType}`);
-              const subjects = exam.subjects || [];
-              console.log(`   Subjects (${subjects.length}):`, subjects);
-              subjects.forEach(sub => {
-                console.log(`     ${sub.name}: ${sub.marks}/${sub.total}`);
-              });
-            });
-          }
-        });
+        if (result.students.length > 0) {
+          const firstStudent = result.students[0];
+          console.log('📝 Sample student marks:', {
+            name: firstStudent.basicInfo?.name,
+            exams: firstStudent.marks?.exams?.length || 0,
+            firstExam: firstStudent.marks?.exams?.[0]
+          });
+        }
         
         setStudents(result.students);
         
-        // Extract unique exam types from all students
+        // Extract unique exam types
         const examTypes = new Set();
         result.students.forEach(student => {
           const exams = student.marks?.exams || [];
@@ -149,10 +152,10 @@ const MarksCard = ({
         });
         const sortedExamTypes = Array.from(examTypes).sort();
         setAvailableExamTypes(sortedExamTypes);
-        console.log(' Available exam types:', sortedExamTypes);
+        console.log('📋 Available exam types:', sortedExamTypes);
         
         // Auto-select first grade and section if available
-        if (result.students.length > 0) {
+        if (result.students.length > 0 && !selectedGrade) {
           const firstStudent = result.students[0];
           if (firstStudent.basicInfo?.grade) {
             setSelectedGrade(firstStudent.basicInfo.grade);
@@ -160,6 +163,50 @@ const MarksCard = ({
           if (firstStudent.basicInfo?.section) {
             setSelectedSection(firstStudent.basicInfo.section);
           }
+        }
+        
+        // If in view mode with grade/section selected, update view students
+        if (isViewMode && viewGrade && viewSection) {
+          const filtered = result.students.filter(student => 
+            student.basicInfo?.grade === viewGrade &&
+            student.basicInfo?.section === viewSection
+          );
+          setViewStudents(filtered);
+          setViewHasLoadedStudents(true);
+          
+          // Update exam types for view mode
+          const viewExamTypes = new Set();
+          filtered.forEach(student => {
+            const exams = student.marks?.exams || [];
+            exams.forEach(exam => {
+              if (exam.examType) {
+                viewExamTypes.add(exam.examType);
+              }
+            });
+          });
+          setViewAvailableExamTypes(Array.from(viewExamTypes).sort());
+        }
+        
+        // If in download mode with grade/section selected, update download students
+        if (isDownloadMode && downloadGrade && downloadSection) {
+          const filtered = result.students.filter(student => 
+            student.basicInfo?.grade === downloadGrade &&
+            student.basicInfo?.section === downloadSection
+          );
+          setDownloadStudents(filtered);
+          setDownloadHasLoadedStudents(true);
+          
+          // Update exam types for download mode
+          const downloadExamTypes = new Set();
+          filtered.forEach(student => {
+            const exams = student.marks?.exams || [];
+            exams.forEach(exam => {
+              if (exam.examType) {
+                downloadExamTypes.add(exam.examType);
+              }
+            });
+          });
+          setDownloadAvailableExamTypes(Array.from(downloadExamTypes).sort());
         }
         
         toast.success(`Loaded ${result.students.length} students with latest marks`);
@@ -173,23 +220,30 @@ const MarksCard = ({
       toast.error('Failed to load students');
       setStudents([]);
     } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
+      if (isMountedRef.current) {
+        setIsLoading(false);
+        setIsRefreshing(false);
+      }
     }
-  };
+  }, [viewGrade, viewSection, downloadGrade, downloadSection, isViewMode, isDownloadMode, selectedGrade]);
 
   // Manual refresh function
-  const refreshData = async () => {
+  const refreshData = useCallback(async () => {
+    if (isRefreshing || isLoading) {
+      console.log('⏳ Already refreshing, skipping...');
+      return;
+    }
+    
     setIsRefreshing(true);
     await loadStudents(true);
-    // Also refresh hall tickets
+    
     if (onRefreshHallTickets) {
       await onRefreshHallTickets();
     }
-  };
+  }, [loadStudents, onRefreshHallTickets, isRefreshing, isLoading]);
 
   // Load school info
-  const loadSchoolInfo = async () => {
+  const loadSchoolInfo = useCallback(async () => {
     try {
       const result = await StudentApi.getSchoolInfo();
       if (result.success && result.data) {
@@ -198,11 +252,14 @@ const MarksCard = ({
     } catch (error) {
       console.error('Error loading school info:', error);
     }
-  };
+  }, []);
 
   // Load students on mount
   useEffect(() => {
+    isMountedRef.current = true;
+    
     if (propStudents && propStudents.length > 0) {
+      console.log('📚 Using prop students:', propStudents.length);
       setStudents(propStudents);
       // Extract exam types from prop students
       const examTypes = new Set();
@@ -218,12 +275,15 @@ const MarksCard = ({
     } else {
       loadStudents(true);
     }
-  }, [propStudents]);
+    
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, [propStudents, loadStudents]);
 
-  // Load school info
   useEffect(() => {
     loadSchoolInfo();
-  }, []);
+  }, [loadSchoolInfo]);
 
   // Get unique grades and sections
   const grades = useMemo(() => {
@@ -265,10 +325,8 @@ const MarksCard = ({
     setFilteredStudents(filtered);
   }, [students, searchTerm, selectedGrade, selectedSection]);
 
-  /**
-   * STEP 1: Load students for view mode
-   */
-  const handleViewStudents = async () => {
+  // Load students for view mode with fresh data
+  const handleViewStudents = useCallback(async () => {
     if (!viewGrade || !viewSection) {
       toast.warning('Please select both grade and section');
       return;
@@ -278,6 +336,8 @@ const MarksCard = ({
     setViewHasLoadedStudents(false);
     try {
       const result = await StudentApi.getAllStudentsWithClassMarks(true);
+      if (!isMountedRef.current) return;
+      
       if (result.success && result.students) {
         setStudents(result.students);
         
@@ -285,8 +345,21 @@ const MarksCard = ({
           student.basicInfo?.grade === viewGrade &&
           student.basicInfo?.section === viewSection
         );
+        
+        console.log(`📊 Found ${filtered.length} students in Grade ${viewGrade} - Section ${viewSection}`);
+        
+        if (filtered.length > 0) {
+          const firstStudent = filtered[0];
+          console.log('📝 First student marks:', {
+            name: firstStudent.basicInfo?.name,
+            exams: firstStudent.marks?.exams?.length || 0,
+            examDetails: firstStudent.marks?.exams
+          });
+        }
+        
         setViewStudents(filtered);
         
+        // Extract exam types from filtered students
         const examTypes = new Set();
         filtered.forEach(student => {
           const exams = student.marks?.exams || [];
@@ -308,7 +381,6 @@ const MarksCard = ({
         
         setViewHasLoadedStudents(true);
         
-        // Also refresh hall tickets for these students
         if (onRefreshHallTickets) {
           await onRefreshHallTickets();
         }
@@ -323,14 +395,14 @@ const MarksCard = ({
       console.error('Error refreshing students:', error);
       toast.error('Failed to refresh data');
     } finally {
-      setIsLoading(false);
+      if (isMountedRef.current) {
+        setIsLoading(false);
+      }
     }
-  };
+  }, [viewGrade, viewSection, onRefreshHallTickets]);
 
-  /**
-   * STEP 1: Load students for download mode
-   */
-  const handleLoadDownloadStudents = async () => {
+  // Load students for download mode with fresh data
+  const handleLoadDownloadStudents = useCallback(async () => {
     if (!downloadGrade || !downloadSection) {
       toast.warning('Please select both grade and section');
       return;
@@ -340,6 +412,8 @@ const MarksCard = ({
     setDownloadHasLoadedStudents(false);
     try {
       const result = await StudentApi.getAllStudentsWithClassMarks(true);
+      if (!isMountedRef.current) return;
+      
       if (result.success && result.students) {
         setStudents(result.students);
         
@@ -347,6 +421,8 @@ const MarksCard = ({
           student.basicInfo?.grade === downloadGrade &&
           student.basicInfo?.section === downloadSection
         );
+        
+        console.log(`📊 Found ${filtered.length} students for download`);
         setDownloadStudents(filtered);
         
         const examTypes = new Set();
@@ -370,7 +446,6 @@ const MarksCard = ({
         
         setDownloadHasLoadedStudents(true);
         
-        // Also refresh hall tickets for these students
         if (onRefreshHallTickets) {
           await onRefreshHallTickets();
         }
@@ -385,9 +460,11 @@ const MarksCard = ({
       console.error('Error refreshing students:', error);
       toast.error('Failed to refresh data');
     } finally {
-      setIsLoading(false);
+      if (isMountedRef.current) {
+        setIsLoading(false);
+      }
     }
-  };
+  }, [downloadGrade, downloadSection, onRefreshHallTickets]);
 
   // Get overall grade
   const getOverallGrade = (percentage) => {
@@ -489,7 +566,6 @@ const MarksCard = ({
     const basicInfo = student.basicInfo || {};
     let exams = student.marks?.exams || [];
     
-    // Filter exams if examType is provided
     if (examType) {
       exams = exams.filter(exam => exam.examType === examType);
     }
@@ -503,7 +579,6 @@ const MarksCard = ({
     };
     
     const performance = getStudentPerformance(studentWithFilteredExams);
-    // Use the getRollNumber helper
     const rollNumber = getRollNumber(student);
     
     const escapeHtml = (text) => {
@@ -515,7 +590,6 @@ const MarksCard = ({
 
     const hasExams = exams.length > 0;
     const schoolName = schoolInfo.schoolName || 'School Name';
-    const examTypeDisplay = examType || 'All Exams';
 
     return `
       <!DOCTYPE html>
@@ -902,6 +976,7 @@ const MarksCard = ({
           <div class="exam-section">
             <div class="exam-section-header">
               <h3>Examination Details</h3>
+              ${examType ? `<span class="badge">Filtered: ${escapeHtml(examType)}</span>` : ''}
             </div>
 
             ${hasExams ? exams.map((exam, index) => {
@@ -920,6 +995,10 @@ const MarksCard = ({
                       <div class="exam-name">${escapeHtml(exam.examType || 'Examination ' + (index + 1))}</div>
                       <div class="exam-date">${exam.examDate ? escapeHtml(exam.examDate) : ''}</div>
                     </div>
+                  </div>
+                  <div class="exam-score">
+                    <span class="exam-percentage">${examPercentage}%</span>
+                    <span class="exam-grade-badge">${escapeHtml(examGrade)}</span>
                   </div>
                 </div>
                 
@@ -946,7 +1025,7 @@ const MarksCard = ({
                         <td>${subMarks}</td>
                         <td>${subTotal}</td>
                         <td>${subPercentage}%</td>
-                        <td><span>${escapeHtml(subGrade)}</span></td>
+                        <td><span class="subject-grade-badge">${escapeHtml(subGrade)}</span></td>
                       </tr>
                       `;
                     }).join('')}
@@ -955,7 +1034,7 @@ const MarksCard = ({
                       <td>${totalMarks}</td>
                       <td>${totalPossible}</td>
                       <td>${examPercentage}%</td>
-                      <td><span>${escapeHtml(examGrade)}</span></td>
+                      <td><span class="exam-grade-badge" style="background:linear-gradient(135deg,#2c3e50,#4a6fa5);color:#fff;">${escapeHtml(examGrade)}</span></td>
                     </tr>
                   </tbody>
                 </table>
@@ -991,20 +1070,22 @@ const MarksCard = ({
     `;
   };
 
-  // Download PDF with exam filter
-  const downloadPDF = async (student, examType = null) => {
+  // Download PDF with fresh data
+  const downloadPDF = useCallback(async (student, examType = null) => {
     if (!student) return;
     
     setIsDownloading(true);
     try {
-      // Fetch fresh data before downloading
       const result = await StudentApi.getAllStudentsWithClassMarks(true);
       let studentData = student;
+      
       if (result.success && result.students) {
         const updatedStudent = result.students.find(s => s.studentId === student.studentId);
         if (updatedStudent) {
           studentData = updatedStudent;
-          setStudents(result.students);
+          console.log(`📝 Updated student data for ${studentData.basicInfo?.name}:`, {
+            exams: studentData.marks?.exams?.length || 0
+          });
         }
       }
       
@@ -1031,26 +1112,21 @@ const MarksCard = ({
     } finally {
       setIsDownloading(false);
     }
-  };
+  }, [getMarksCardHTML]);
 
-  // View marks preview with exam filter
-  const viewMarks = async (student, examType = null) => {
+  // View marks preview with fresh data
+  const viewMarks = useCallback(async (student, examType = null) => {
     setIsLoading(true);
     try {
       const result = await StudentApi.getAllStudentsWithClassMarks(true);
       if (result.success && result.students) {
         const updatedStudent = result.students.find(s => s.studentId === student.studentId);
         if (updatedStudent) {
-          console.log('📝 Updated student data:', updatedStudent);
-          console.log('📚 Exams with subjects:', updatedStudent.marks?.exams);
-          
           setSelectedStudent({
             ...updatedStudent,
             _filterExamType: examType
           });
-          setStudents(result.students);
         } else {
-          console.log('⚠️ Student not found in updated data, using existing');
           setSelectedStudent({
             ...student,
             _filterExamType: examType
@@ -1073,7 +1149,7 @@ const MarksCard = ({
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   // Clear filters
   const clearFilters = () => {
@@ -1081,7 +1157,6 @@ const MarksCard = ({
     setSelectedGrade('');
     setSelectedSection('');
     setSelectedExamType('');
-    setIsExamFilterActive(false);
   };
 
   // Clear view mode filters
@@ -1186,14 +1261,22 @@ const MarksCard = ({
           <h2 className="text-2xl font-bold text-gray-800">Marks Card</h2>
           <p className="text-gray-600">View and download academic marks cards</p>
         </div>
-        <button
-          onClick={refreshData}
-          disabled={isRefreshing || isLoading}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 disabled:opacity-50"
-        >
-          <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-          {isRefreshing ? 'Refreshing...' : 'Refresh'}
-        </button>
+        <div className="flex items-center gap-2">
+          {isRefreshing && (
+            <span className="text-sm text-blue-600 flex items-center gap-1">
+              <Loader className="w-4 h-4 animate-spin" />
+              Refreshing...
+            </span>
+          )}
+          <button
+            onClick={refreshData}
+            disabled={isRefreshing || isLoading}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+            {isRefreshing ? 'Refreshing...' : 'Refresh'}
+          </button>
+        </div>
       </div>
 
       {/* Mode Selection Buttons */}
@@ -1421,7 +1504,6 @@ const MarksCard = ({
             </>
           )}
 
-          {/* Show message when no students loaded yet */}
           {!viewHasLoadedStudents && !isLoading && viewGrade && viewSection && (
             <div className="text-center py-8">
               <div className="text-gray-400 mb-2">
@@ -1431,7 +1513,6 @@ const MarksCard = ({
             </div>
           )}
 
-          {/* Show message when grade/section not selected */}
           {!viewGrade || !viewSection && (
             <div className="text-center py-8">
               <p className="text-gray-400">Please select a grade and section to view students</p>
@@ -1556,7 +1637,7 @@ const MarksCard = ({
                     </span>
                     {downloadSelectedExamType && (
                       <span className="text-xs bg-green-100 text-green-800 px-3 py-1 rounded-full">
-                         Downloading: {downloadSelectedExamType}
+                        Downloading: {downloadSelectedExamType}
                       </span>
                     )}
                   </div>
@@ -1671,7 +1752,6 @@ const MarksCard = ({
             </>
           )}
 
-          {/* Show message when no students loaded yet */}
           {!downloadHasLoadedStudents && !isLoading && downloadGrade && downloadSection && (
             <div className="text-center py-8">
               <div className="text-gray-400 mb-2">
@@ -1681,7 +1761,6 @@ const MarksCard = ({
             </div>
           )}
 
-          {/* Show message when grade/section not selected */}
           {!downloadGrade || !downloadSection && (
             <div className="text-center py-8">
               <p className="text-gray-400">Please select a grade and section to load students</p>
@@ -1710,7 +1789,7 @@ const MarksCard = ({
                   {selectedStudent.basicInfo?.name || 'Student'} - {selectedStudent.basicInfo?.grade || ''} {selectedStudent.basicInfo?.section || ''}
                   {selectedStudent._filterExamType && (
                     <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
-                       {selectedStudent._filterExamType}
+                      {selectedStudent._filterExamType}
                     </span>
                   )}
                 </p>
