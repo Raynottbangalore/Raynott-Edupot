@@ -1,4 +1,4 @@
-// src/services/StudentApi.js
+// src/service/StudentApi.js
 import { auth } from './firebase';
 import BASE_URL from './base_urls';
 
@@ -254,11 +254,11 @@ class StudentApi {
         if (error.message?.includes('blocked by CORS policy') || 
             error.message?.includes('CORS') ||
             error.message?.includes('Failed to fetch')) {
-          console.warn('🌐 CORS error detected, retrying without custom headers...');
+          console.warn(' CORS error detected, retrying without custom headers...');
           
           if (attempt < retries - 1) {
             const delay = this.getRetryDelay(attempt);
-            console.warn(`🌐 CORS/Network error, retrying in ${Math.ceil(delay/1000)}s...`);
+            console.warn(` CORS/Network error, retrying in ${Math.ceil(delay/1000)}s...`);
             await new Promise(resolve => setTimeout(resolve, delay));
             
             // On CORS error, retry with minimal headers
@@ -367,140 +367,178 @@ class StudentApi {
     }
   }
 
-  /**
-   * Get all students with class exam marks merged
-   */
-  static async getAllStudentsWithClassMarks(forceRefresh = false) {
-    try {
-      console.log('🔍 Fetching all students with class marks...', forceRefresh ? '(FORCE REFRESH)' : '');
-      
-      const studentsResult = await this.getAllStudents(forceRefresh);
-      if (!studentsResult.success) {
-        return studentsResult;
-      }
+/**
+ * Get all students with class exam marks merged
+ */
+// src/service/StudentApi.js
 
-      const students = studentsResult.students || [];
-      console.log(`👥 Found ${students.length} students`);
-      
-      if (students.length === 0) {
-        return { success: true, students: [] };
-      }
+/**
+ * Get all students with class exam marks merged
+ */
+static async getAllStudentsWithClassMarks(forceRefresh = false) {
+  try {
+    console.log('🔍 Fetching all students with class marks...', forceRefresh ? '(FORCE REFRESH)' : '');
+    
+    const studentsResult = await this.getAllStudents(forceRefresh);
+    if (!studentsResult.success) {
+      return studentsResult;
+    }
 
-      // Group students by class
-      const classMap = new Map();
-      students.forEach(student => {
-        const grade = student.basicInfo?.grade;
-        const section = student.basicInfo?.section;
-        if (grade && section) {
-          const key = `${grade}-${section}`;
-          if (!classMap.has(key)) {
-            classMap.set(key, { grade, section, studentIds: [] });
-          }
-          classMap.get(key).studentIds.push(student.studentId);
+    const students = studentsResult.students || [];
+    console.log(`👥 Found ${students.length} students`);
+    
+    if (students.length === 0) {
+      return { success: true, students: [] };
+    }
+
+    // Group students by class and section
+    const classMap = new Map();
+    students.forEach(student => {
+      const grade = student.basicInfo?.grade;
+      const section = student.basicInfo?.section;
+      if (grade && section) {
+        const key = `${grade}-${section}`;
+        if (!classMap.has(key)) {
+          classMap.set(key, { grade, section, studentIds: [] });
         }
-      });
+        classMap.get(key).studentIds.push(student.studentId);
+      }
+    });
 
-      // Fetch exams for each class
-      const examMap = new Map();
-      for (const [key, classData] of classMap) {
-        try {
-          // Force refresh exams data
-          const examsResult = await this.getClassExams(
-            classData.grade, 
-            classData.section, 
-            true // force refresh
-          );
-          
-          if (examsResult.success && examsResult.exams?.length > 0) {
-            // Log subjects for debugging
-            const firstExam = examsResult.exams[0];
-            console.log(`📚 Class ${key} has ${examsResult.exams.length} exams with subjects:`, 
-              firstExam?.subjects?.map(s => s.name) || 'No subjects'
-            );
-            examMap.set(key, examsResult.exams);
-          } else {
-            examMap.set(key, []);
-          }
-        } catch (error) {
-          console.error(`❌ Error fetching exams for class ${key}:`, error);
+    // Fetch exams for each class
+    const examMap = new Map();
+    for (const [key, classData] of classMap) {
+      try {
+        const examsResult = await this.getClassExams(
+          classData.grade, 
+          classData.section, 
+          forceRefresh
+        );
+        
+        if (examsResult.success && examsResult.exams?.length > 0) {
+          examMap.set(key, examsResult.exams);
+          console.log(`📚 Class ${key} has ${examsResult.exams.length} exams`);
+        } else {
           examMap.set(key, []);
         }
+      } catch (error) {
+        console.error(`❌ Error fetching exams for class ${key}:`, error);
+        examMap.set(key, []);
       }
+    }
 
-      // Merge exam data into students
-      const studentsWithMarks = students.map(student => {
-        const grade = student.basicInfo?.grade;
-        const section = student.basicInfo?.section;
-        const key = `${grade}-${section}`;
-        const classExams = examMap.get(key) || [];
+    // Process students with the latest exam data
+    const studentsWithMarks = students.map(student => {
+      const grade = student.basicInfo?.grade;
+      const section = student.basicInfo?.section;
+      const key = `${grade}-${section}`;
+      const classExams = examMap.get(key) || [];
+      
+      // Process each exam from the class
+      const processedExams = classExams.map(exam => {
+        // Get the latest subjects from the exam
+        const latestSubjects = exam.subjects || [];
         
-        // Process class exams with subject data
-        const studentClassExams = classExams
-          .filter(exam => exam.marks?.[student.studentId])
-          .map(exam => {
-            const studentMarks = exam.marks[student.studentId];
-            
-            let subjects = [];
-            if (studentMarks?.marks && Array.isArray(studentMarks.marks)) {
-              subjects = studentMarks.marks.map(mark => ({
-                name: mark.name || 'Unknown Subject',
-                marks: mark.marks || 0,
-                total: mark.total || 0,
-                grade: mark.grade || this.calculateGrade(((mark.marks || 0) / (mark.total || 1)) * 100)
-              }));
-            } else if (exam.subjects) {
-              // ⭐ IMPORTANT: Use the subjects from the exam with their total values
-              subjects = exam.subjects.map(subject => ({
-                name: subject.name || 'Unknown Subject',
-                marks: 0,
-                total: subject.total || 0,
-                grade: 'N/A'
-              }));
-            }
-            
-            const totalMarks = subjects.reduce((sum, s) => sum + (s.marks || 0), 0);
-            const totalPossible = subjects.reduce((sum, s) => sum + (s.total || 0), 0);
-            const percentage = totalPossible > 0 ? (totalMarks / totalPossible) * 100 : 0;
+        // Get the student's marks for this exam
+        const studentMarks = exam.marks?.[student.studentId];
+        let subjects = [];
+        
+        if (studentMarks?.marks && Array.isArray(studentMarks.marks)) {
+          // Create a map of subject name to obtained marks
+          const marksMap = {};
+          studentMarks.marks.forEach(mark => {
+            // ⭐ FIX: Ensure marks are parsed as numbers
+            const marksObtained = parseFloat(mark.marks) || 0;
+            marksMap[mark.name] = marksObtained;
+          });
+          
+          // Build subjects using the latest subject configuration
+          subjects = latestSubjects.map(subject => {
+            const marksObtained = marksMap[subject.name] || 0;
+            // ⭐ FIX: Ensure total is parsed as number
+            const total = parseFloat(subject.total) || 0;
+            const percentage = total > 0 ? (marksObtained / total) * 100 : 0;
             
             return {
-              id: exam.id || Date.now().toString(),
-              examType: exam.examType || 'Class Exam',
-              examDate: exam.examDate || new Date().toISOString().split('T')[0],
-              subjects: subjects,
-              totalMarks: totalMarks,
-              totalPossible: totalPossible,
-              percentage: Math.round(percentage * 10) / 10,
-              overallGrade: this.calculateGrade(percentage)
+              name: subject.name || 'Unknown Subject',
+              marks: marksObtained,
+              total: total,
+              grade: this.calculateGrade(percentage)
             };
           });
-
-        // Combine with existing exams
-        const existingExams = (student.marks?.exams || []).map(exam => ({
-          ...exam,
-          subjects: exam.subjects || []
-        }));
+        } else {
+          // If no marks exist, create empty subject entries
+          subjects = latestSubjects.map(subject => ({
+            name: subject.name || 'Unknown Subject',
+            marks: 0,
+            total: parseFloat(subject.total) || 0,
+            grade: 'N/A'
+          }));
+        }
         
-        const allExams = [...studentClassExams, ...existingExams];
-        allExams.sort((a, b) => (a.examDate || '').localeCompare(b.examDate || ''));
-
+        // ⭐ FIX: Use reduce with proper number parsing
+        const totalMarks = subjects.reduce((sum, s) => {
+          const marks = parseFloat(s.marks) || 0;
+          return sum + marks;
+        }, 0);
+        
+        const totalPossible = subjects.reduce((sum, s) => {
+          const total = parseFloat(s.total) || 0;
+          return sum + total;
+        }, 0);
+        
+        const percentage = totalPossible > 0 ? (totalMarks / totalPossible) * 100 : 0;
+        
         return {
-          ...student,
-          marks: {
-            ...student.marks,
-            exams: allExams
-          }
+          id: exam.id || Date.now().toString(),
+          examType: exam.examType || 'Class Exam',
+          examDate: exam.examDate || new Date().toISOString().split('T')[0],
+          subjects: subjects,
+          totalMarks: Math.round(totalMarks * 100) / 100,  // Round to 2 decimal places
+          totalPossible: Math.round(totalPossible * 100) / 100,
+          percentage: Math.round(percentage * 10) / 10,
+          overallGrade: this.calculateGrade(percentage)
         };
       });
 
+      // Merge with existing student exams (for individual marks added outside class exams)
+      const existingExams = (student.marks?.exams || []).map(exam => ({
+        ...exam,
+        subjects: exam.subjects || []
+      }));
+      
+      // Combine and deduplicate by exam id
+      const allExamsMap = {};
+      processedExams.forEach(exam => {
+        allExamsMap[exam.id] = exam;
+      });
+      existingExams.forEach(exam => {
+        if (!allExamsMap[exam.id]) {
+          allExamsMap[exam.id] = exam;
+        }
+      });
+      
+      const allExams = Object.values(allExamsMap);
+      allExams.sort((a, b) => (a.examDate || '').localeCompare(b.examDate || ''));
+
       return {
-        success: true,
-        students: studentsWithMarks
+        ...student,
+        marks: {
+          ...student.marks,
+          exams: allExams
+        }
       };
-    } catch (error) {
-      console.error('❌ Get all students with class marks error:', error);
-      return { success: false, error: error.message || 'Failed to load students with marks' };
-    }
+    });
+
+    return {
+      success: true,
+      students: studentsWithMarks
+    };
+  } catch (error) {
+    console.error('❌ Get all students with class marks error:', error);
+    return { success: false, error: error.message || 'Failed to load students with marks' };
   }
+}
 
   /**
    * Get single student by ID
@@ -601,6 +639,26 @@ class StudentApi {
   // ────────────────────────────────────────────────
 
   /**
+   * Get class subjects with force refresh
+   */
+  static async getClassSubjectsForceRefresh(grade, section) {
+    try {
+      // Use a cache-buster to force fresh data
+      const cacheBuster = `?_=${Date.now()}`;
+      const data = await this.makeRequest(
+        `${BASE_URL}/class-exams/${grade}/${section}/subjects${cacheBuster}`,
+        {
+          method: 'GET',
+        }
+      );
+      return { success: true, subjects: data.subjects || [] };
+    } catch (error) {
+      console.error('❌ Force refresh class subjects error:', error);
+      return { success: false, error: error.message, subjects: [] };
+    }
+  }
+
+  /**
    * Get class subjects
    */
   static async getClassSubjects(grade, section) {
@@ -635,29 +693,88 @@ class StudentApi {
     }
   }
 
-  /**
-   * Get class exams - NO force refresh by default, NO cache-control header
-   */
-  static async getClassExams(grade, section, forceRefresh = false) {
-    try {
-      const cacheBuster = forceRefresh ? `?_=${Date.now()}` : '';
-      const data = await this.makeRequest(
-        `${BASE_URL}/class-exams/${grade}/${section}/exams${cacheBuster}`,
-        {
-          method: 'GET',
-        }
-      );
-      
-      return { 
-        success: true, 
-        exams: Array.isArray(data.exams) ? data.exams : [] 
-      };
-    } catch (error) {
-      console.error('❌ Get class exams error:', error);
-      return { success: false, error: error.message, exams: [] };
-    }
-  }
 
+/**
+ * Update exam subjects and migrate existing marks
+ * @param {string} grade - Grade
+ * @param {string} section - Section
+ * @param {string} examId - Exam ID
+ * @param {Array} newSubjects - New subjects array
+ * @returns {Promise<Object>} - Result
+ */
+static async updateExamSubjects(grade, section, examId, newSubjects) {
+  try {
+    const data = await this.makeRequest(
+      `${BASE_URL}/class-exams/${grade}/${section}/exams/${examId}/subjects`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({ subjects: newSubjects }),
+      }
+    );
+    return data;
+  } catch (error) {
+    console.error('❌ Update exam subjects error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Migrate existing marks to new subject structure
+ * @param {string} grade - Grade
+ * @param {string} section - Section
+ * @param {string} examId - Exam ID
+ * @param {Array} newSubjects - New subjects array
+ * @returns {Promise<Object>} - Result
+ */
+static async migrateExamMarks(grade, section, examId, newSubjects) {
+  try {
+    const data = await this.makeRequest(
+      `${BASE_URL}/class-exams/${grade}/${section}/exams/${examId}/migrate`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ subjects: newSubjects }),
+      }
+    );
+    return data;
+  } catch (error) {
+    console.error('❌ Migrate exam marks error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+static async getClassExams(grade, section, forceRefresh = false) {
+  try {
+    // ⭐ Always use cache buster when forceRefresh is true
+    const cacheBuster = forceRefresh ? `?_=${Date.now()}` : '';
+    const data = await this.makeRequest(
+      `${BASE_URL}/class-exams/${grade}/${section}/exams${cacheBuster}`,
+      {
+        method: 'GET',
+        // ⭐ Add headers to prevent caching
+        headers: forceRefresh ? {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        } : {}
+      }
+    );
+    
+    // ⭐ Ensure subjects are always present
+    const exams = Array.isArray(data.exams) ? data.exams : [];
+    const processedExams = exams.map(exam => ({
+      ...exam,
+      subjects: exam.subjects || []
+    }));
+    
+    return { 
+      success: true, 
+      exams: processedExams
+    };
+  } catch (error) {
+    console.error('❌ Get class exams error:', error);
+    return { success: false, error: error.message, exams: [] };
+  }
+}
   /**
    * Create class exam
    */

@@ -1,4 +1,5 @@
 // src/components/dashboard/components/MarksCard.jsx
+
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { Search, X, Download, Loader, Eye, Filter, ChevronDown, RefreshCw, AlertCircle } from 'lucide-react';
 import { toast } from 'react-toastify';
@@ -11,7 +12,8 @@ const MarksCard = ({
   hallTicketData: propHallTicketData = {},
   getHallTicketData,
   onRefreshHallTickets,
-  refreshTrigger = 0
+  refreshTrigger = 0,
+  subjectRefreshTrigger = 0
 }) => {
   const [students, setStudents] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -106,6 +108,13 @@ const MarksCard = ({
       refreshData();
     }
   }, [refreshTrigger]);
+
+  useEffect(()=>{
+    if(subjectRefreshTrigger > 0){
+      console.log('Subject changes detected,forcing full refresh....')
+      loadStudents(true)
+    }
+  },[subjectRefreshTrigger])
 
   // Load students with proper data fetching
   const loadStudents = useCallback(async (forceRefresh = true) => {
@@ -514,9 +523,9 @@ const MarksCard = ({
     const subjectMap = new Map();
 
     exams.forEach(exam => {
-      totalPercentage += exam.percentage || 0;
-      totalMarks += exam.totalMarks || 0;
-      totalPossible += exam.totalPossible || 0;
+      totalPercentage += parseFloat(exam.percentage) || 0;
+      totalMarks += parseFloat(exam.totalMarks) || 0;
+      totalPossible += parseFloat( exam.totalPossible )|| 0;
       
       const subjects = exam.subjects || [];
       subjects.forEach(subject => {
@@ -530,8 +539,8 @@ const MarksCard = ({
           });
         }
         const subData = subjectMap.get(subjectName);
-        subData.totalMarks += subject.marks || 0;
-        subData.totalPossible += subject.total || 0;
+        subData.totalMarks += parseFloat(subject.marks )|| 0;
+        subData.totalPossible += parseFloat( subject.total) || 0;
         subData.count++;
       });
     });
@@ -566,8 +575,19 @@ const MarksCard = ({
     const basicInfo = student.basicInfo || {};
     let exams = student.marks?.exams || [];
     
+    console.log(`📝 Generating marks card for ${basicInfo.name}:`, {
+      totalExams: exams.length,
+      exams: exams.map(e => ({
+        type: e.examType,
+        subjects: e.subjects?.length || 0,
+        totalMarks: e.totalMarks,
+        totalPossible: e.totalPossible
+      }))
+    });
+    
     if (examType) {
       exams = exams.filter(exam => exam.examType === examType);
+      console.log(`📝 Filtered to ${exams.length} exams for ${examType}`);
     }
     
     const studentWithFilteredExams = {

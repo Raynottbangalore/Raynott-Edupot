@@ -1,4 +1,5 @@
 // src/components/dashboard/Dashboard.jsx
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { LogOut, Users, UserPlus, List, BarChart3, Search, DollarSign, Award, Ticket, School, MapPin, Award as AwardIcon, Edit, X, Save, Loader, Building, Mail, Phone, Calendar } from 'lucide-react';
 import StudentList from '../Components/StudentList';
@@ -36,8 +37,9 @@ const Dashboard = ({ user, onLogout }) => {
   // Hall ticket data state
   const [studentHallTicketData, setStudentHallTicketData] = useState({});
 
-  // ⭐ NEW: Refresh trigger for MarksCard
+  // ⭐ NEW: Refresh triggers for MarksCard and MarksTab
   const [refreshMarksCard, setRefreshMarksCard] = useState(0);
+  const [subjectRefreshTrigger, setSubjectRefreshTrigger] = useState(0);
 
   // School Info Modal States
   const [isSchoolInfoModalOpen, setIsSchoolInfoModalOpen] = useState(false);
@@ -52,11 +54,17 @@ const Dashboard = ({ user, onLogout }) => {
 
   const navigate = useNavigate();
 
-const handleStudentUpdate = useCallback((updatedStudent) => {
-  setRefreshMarksCard(prev => prev + 1);
-  console.log('🔄 Student updated, triggering MarksCard refresh');
-  refreshStudents();
-}, []);
+  // ⭐ NEW: Function to trigger MarksTab refresh (called when subjects change)
+  const handleSubjectRefresh = useCallback(() => {
+    setSubjectRefreshTrigger(prev => prev + 1);
+    console.log('🔄 Subject refresh triggered, MarksCard will reload');
+  }, []);
+
+  const handleStudentUpdate = useCallback((updatedStudent) => {
+    setRefreshMarksCard(prev => prev + 1);
+    console.log('🔄 Student updated, triggering MarksCard refresh');
+    refreshStudents();
+  }, []);
 
   // Function to update hall ticket data from HallTicket component
   const updateHallTicketData = useCallback((studentId, hallTicketData) => {
@@ -581,7 +589,8 @@ const handleStudentUpdate = useCallback((updatedStudent) => {
             hallTicketData={studentHallTicketData}
             getHallTicketData={getHallTicketData}
             onRefreshHallTickets={loadHallTicketsForStudents}
-            refreshTrigger={refreshMarksCard}  // ⭐ PASS THE REFRESH TRIGGER
+            refreshTrigger={refreshMarksCard}
+            subjectRefreshTrigger={subjectRefreshTrigger}  // ⭐ ADD THIS
           />
         ) : activeTab === 'addStudent' ? (
           <AddStudent
@@ -603,7 +612,8 @@ const handleStudentUpdate = useCallback((updatedStudent) => {
         ) : activeTab === 'marks' ? (
           <MarksTab
             students={students}
-            onUpdateStudent={handleStudentUpdate}  // ⭐ PASS THE UPDATE HANDLER
+            onUpdateStudent={handleStudentUpdate}
+            onRefreshMarksCard={handleSubjectRefresh}  // ⭐ ADD THIS
           />
         ) : activeTab === 'assessment' ? (
           <AssessmentTab

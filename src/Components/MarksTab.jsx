@@ -1,14 +1,15 @@
 // src/components/dashboard/components/MarksTab.jsx
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Search, User, Award, Calendar, BookOpen, TrendingUp, Eye, X, 
   School, Users, ArrowLeft, ChevronRight, Plus, Trash2, Save,
-  Edit2, Check, AlertCircle, Settings, RefreshCw
+  Edit2, Check, AlertCircle, Settings
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import StudentApi from '../service/StudentApi';
 
-const MarksTab = ({ students, onUpdateStudent }) => {
+const MarksTab = ({ students, onUpdateStudent, onRefreshMarksCard }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedGrade, setSelectedGrade] = useState('');
   const [selectedSection, setSelectedSection] = useState('');
@@ -16,7 +17,6 @@ const MarksTab = ({ students, onUpdateStudent }) => {
   const [selectedClass, setSelectedClass] = useState(null);
   const [selectedSectionData, setSelectedSectionData] = useState(null);
   const [viewMode, setViewMode] = useState('class');
-  const [isRefreshing, setIsRefreshing] = useState(false);
   
   // Class Exam Management States
   const [classExams, setClassExams] = useState([]);
@@ -41,14 +41,9 @@ const MarksTab = ({ students, onUpdateStudent }) => {
     subjects: [{ id: Date.now().toString(), name: '', total: '' }]
   });
 
-  // Get unique grades and sections from props
-  const grades = useMemo(() => {
-    return [...new Set(students.map(s => s.basicInfo?.grade).filter(Boolean))].sort();
-  }, [students]);
-
-  const sections = useMemo(() => {
-    return [...new Set(students.map(s => s.basicInfo?.section).filter(Boolean))].sort();
-  }, [students]);
+  // Get unique grades and sections
+  const grades = [...new Set(students.map(s => s.basicInfo?.grade).filter(Boolean))].sort();
+  const sections = [...new Set(students.map(s => s.basicInfo?.section).filter(Boolean))].sort();
 
   // Load class exams and subjects when a class is selected
   useEffect(() => {
@@ -68,7 +63,8 @@ const MarksTab = ({ students, onUpdateStudent }) => {
     setLoading(true);
     setExamsLoaded(false);
     try {
-      const subjectsResult = await StudentApi.getClassSubjects(grade, section);
+      // Force refresh subjects
+      const subjectsResult = await StudentApi.getClassSubjectsForceRefresh(grade, section);
       if (subjectsResult.success && subjectsResult.subjects) {
         setClassSubjects(subjectsResult.subjects);
         if (subjectsResult.subjects.length > 0) {
@@ -94,13 +90,7 @@ const MarksTab = ({ students, onUpdateStudent }) => {
       const examsResult = await StudentApi.getClassExams(grade, section, true);
       if (examsResult.success) {
         const exams = Array.isArray(examsResult.exams) ? examsResult.exams : [];
-        const examsWithSubjects = exams.map(exam => ({
-          ...exam,
-          subjects: exam.subjects && exam.subjects.length > 0 
-            ? exam.subjects 
-            : classSubjects
-        }));
-        setClassExams(examsWithSubjects);
+        setClassExams(exams);
       } else {
         setClassExams([]);
       }
@@ -114,89 +104,93 @@ const MarksTab = ({ students, onUpdateStudent }) => {
     }
   };
 
-  // Refresh data
-  const refreshData = async () => {
-    setIsRefreshing(true);
-    try {
-      if (selectedClass) {
-        await loadClassData(selectedClass.grade, selectedClass.section);
-        // Notify parent to refresh all students
-        if (onUpdateStudent) {
-          const result = await StudentApi.getAllStudentsWithClassMarks(true);
-          if (result.success && result.students) {
-            onUpdateStudent(result.students);
-          }
-        }
-        toast.success('Data refreshed successfully');
-      }
-    } catch (error) {
-      console.error('Refresh error:', error);
-      toast.error('Failed to refresh data');
-    } finally {
-      setIsRefreshing(false);
-    }
-  };
+  // Setup class subjects with refresh trigger - FIXED
+  // src/components/dashboard/components/MarksTab.jsx
 
-  // Setup class subjects with refresh trigger
-  const handleSetupSubjects = async () => {
-    const validSubjects = subjectSetup.subjects.filter(
-      s => s.name.trim() && s.total && parseFloat(s.total) > 0
+// Update the handleSetupSubjects function
+
+const handleSetupSubjects = async () => {
+  const validSubjects = subjectSetup.subjects.filter(
+    s => s.name.trim() && s.total && parseFloat(s.total) > 0
+  );
+
+  if (validSubjects.length === 0) {
+    toast.error('Please add at least one valid subject');
+    return;
+  }
+
+  setLoading(true);
+  try {
+    // 1. Update the class subjects
+    const result = await StudentApi.setupClassSubjects(
+      selectedClass.grade,
+      selectedClass.section,
+      validSubjects
     );
 
-    if (validSubjects.length === 0) {
-      toast.error('Please add at least one valid subject');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const result = await StudentApi.setupClassSubjects(
-        selectedClass.grade,
-        selectedClass.section,
-        validSubjects
-      );
-
-      if (result.success) {
-        toast.success('Subjects set up successfully');
-        setClassSubjects(validSubjects);
-        setShowSetupSubjectsModal(false);
-        
-        // Reload class data to get updated subjects
-        await loadClassData(selectedClass.grade, selectedClass.section);
-        
-        // CRITICAL: Update the student data and trigger refresh
-        if (onUpdateStudent) {
-          // Get ALL students from the API with fresh data
-          const studentsResult = await StudentApi.getAllStudentsWithClassMarks(true);
-          if (studentsResult.success && studentsResult.students) {
-            // Pass the entire updated student list to Dashboard
-            onUpdateStudent(studentsResult.students);
-            
-            // Also trigger a specific refresh for the class
-            const updatedClassStudents = studentsResult.students.filter(
-              s => s.basicInfo?.grade === selectedClass.grade && 
-                   s.basicInfo?.section === selectedClass.section
-            );
-            
-            // Update the current view with fresh data
-            setSelectedSectionData({
-              grade: selectedClass.grade,
-              section: selectedClass.section,
-              students: updatedClassStudents,
-              studentCount: updatedClassStudents.length
-            });
-          }
+    if (result.success) {
+      toast.success('Subjects set up successfully');
+      setClassSubjects(validSubjects);
+      setShowSetupSubjectsModal(false);
+      
+      // 2. Update ALL exams with the new subjects and migrate marks
+      const exams = await StudentApi.getClassExams(selectedClass.grade, selectedClass.section, true);
+      
+      if (exams.success && exams.exams) {
+        for (const exam of exams.exams) {
+          // Update each exam's subjects
+          await StudentApi.updateExamSubjects(
+            selectedClass.grade,
+            selectedClass.section,
+            exam.id,
+            validSubjects
+          );
+          
+          // Migrate existing marks to new subject structure
+          await StudentApi.migrateExamMarks(
+            selectedClass.grade,
+            selectedClass.section,
+            exam.id,
+            validSubjects
+          );
         }
-      } else {
-        toast.error(result.error || 'Failed to setup subjects');
+        toast.success(`Updated ${exams.exams.length} exams with new subjects`);
       }
-    } catch (error) {
-      console.error('Setup subjects error:', error);
-      toast.error('Failed to setup subjects');
-    } finally {
-      setLoading(false);
+      
+      // Reload class data to get updated subjects
+      await loadClassData(selectedClass.grade, selectedClass.section);
+      
+      // Trigger MarksCard refresh through parent
+      if (onRefreshMarksCard) {
+        onRefreshMarksCard();
+      }
+      
+      // Update parent with student data
+      if (onUpdateStudent) {
+        const studentsResult = await StudentApi.getAllStudentsWithClassMarks(true);
+        if (studentsResult.success && studentsResult.students) {
+          onUpdateStudent(studentsResult.students);
+        }
+      }
+      
+      // If there's an exam being edited, update it with new subjects
+      if (selectedExamForMarks) {
+        const updatedExam = {
+          ...selectedExamForMarks,
+          subjects: validSubjects
+        };
+        setSelectedExamForMarks(updatedExam);
+      }
+    } else {
+      toast.error(result.error || 'Failed to setup subjects');
     }
-  };
+  } catch (error) {
+    console.error('Setup subjects error:', error);
+    toast.error('Failed to setup subjects');
+  } finally {
+    setLoading(false);
+  }
+};
 
   // Add subject to setup
   const addSetupSubject = () => {
@@ -278,12 +272,9 @@ const MarksTab = ({ students, onUpdateStudent }) => {
           isNewExam: true
         });
         
-        // CRITICAL: Notify parent to refresh data
-        if (onUpdateStudent) {
-          const studentsResult = await StudentApi.getAllStudentsWithClassMarks(true);
-          if (studentsResult.success && studentsResult.students) {
-            onUpdateStudent(studentsResult.students);
-          }
+        // Trigger refresh
+        if (onRefreshMarksCard) {
+          onRefreshMarksCard();
         }
       } else {
         toast.error(result.error || 'Failed to create exam');
@@ -312,12 +303,9 @@ const MarksTab = ({ students, onUpdateStudent }) => {
         toast.success('Exam deleted successfully');
         await loadClassData(selectedClass.grade, selectedClass.section);
         
-        // CRITICAL: Notify parent to refresh data
-        if (onUpdateStudent) {
-          const studentsResult = await StudentApi.getAllStudentsWithClassMarks(true);
-          if (studentsResult.success && studentsResult.students) {
-            onUpdateStudent(studentsResult.students);
-          }
+        // Trigger refresh
+        if (onRefreshMarksCard) {
+          onRefreshMarksCard();
         }
       } else {
         toast.error(result.error || 'Failed to delete exam');
@@ -330,19 +318,24 @@ const MarksTab = ({ students, onUpdateStudent }) => {
     }
   };
 
-  // Open enter marks modal
+  // Open enter marks modal - FIXED to preserve existing marks
   const handleEnterMarks = (exam) => {
+    // Get the latest subjects
+    const latestSubjects = classSubjects.length > 0 ? classSubjects : (exam.subjects || []);
+    
+    // Create a merged exam with latest subjects but preserve existing marks
     const examWithSubjects = {
       ...exam,
-      subjects: exam.subjects && exam.subjects.length > 0 
-        ? exam.subjects 
-        : classSubjects
+      subjects: latestSubjects,
+      // Preserve existing marks data
+      marks: exam.marks || {}
     };
+    
     setSelectedExamForMarks(examWithSubjects);
     setShowEnterMarksModal(true);
   };
 
-  // Save student marks and notify parent
+  // Save student marks and notify parent - FIXED
   const handleSaveMarks = async (studentId, marks) => {
     setLoading(true);
     try {
@@ -360,23 +353,35 @@ const MarksTab = ({ students, onUpdateStudent }) => {
         // Reload class data to get latest marks
         await loadClassData(selectedClass.grade, selectedClass.section);
         
-        // CRITICAL: Notify parent to refresh data
+        // Update the selected exam with new marks
+        if (selectedExamForMarks) {
+          const updatedExam = {
+            ...selectedExamForMarks,
+            marks: {
+              ...selectedExamForMarks.marks,
+              [studentId]: {
+                marks: marks,
+                totalMarks: marks.reduce((sum, m) => sum + (m.marks || 0), 0),
+                percentage: marks.reduce((sum, m) => sum + (m.total || 0), 0) > 0 
+                  ? Math.round((marks.reduce((sum, m) => sum + (m.marks || 0), 0) / marks.reduce((sum, m) => sum + (m.total || 0), 0)) * 100 * 10) / 10
+                  : 0,
+                updatedAt: new Date().toISOString()
+              }
+            }
+          };
+          setSelectedExamForMarks(updatedExam);
+        }
+        
+        // Trigger refresh
+        if (onRefreshMarksCard) {
+          onRefreshMarksCard();
+        }
+        
+        // Notify parent component
         if (onUpdateStudent) {
-          const studentsResult = await StudentApi.getAllStudentsWithClassMarks(true);
-          if (studentsResult.success && studentsResult.students) {
-            // Update the entire student list
-            onUpdateStudent(studentsResult.students);
-            
-            // Also update the current view
-            const updatedClassStudents = studentsResult.students.filter(
-              s => s.basicInfo?.grade === selectedClass.grade && 
-                   s.basicInfo?.section === selectedClass.section
-            );
-            setSelectedSectionData({
-              ...selectedSectionData,
-              students: updatedClassStudents,
-              studentCount: updatedClassStudents.length
-            });
+          const studentResult = await StudentApi.getStudent(studentId);
+          if (studentResult.success) {
+            onUpdateStudent(studentResult.student);
           }
         }
       } else {
@@ -411,6 +416,8 @@ const MarksTab = ({ students, onUpdateStudent }) => {
     setClassSubjects([]);
     setExamsLoaded(false);
     setIsInitialLoad(true);
+    setSelectedExamForMarks(null);
+    setShowEnterMarksModal(false);
   };
 
   // Get existing exam types for dropdown
@@ -499,6 +506,7 @@ const MarksTab = ({ students, onUpdateStudent }) => {
 
     const exams = Array.isArray(classExams) ? classExams : [];
     const hasSubjects = classSubjects.length > 0;
+    const currentSubjects = classSubjects;
 
     return (
       <div className="space-y-6">
@@ -517,20 +525,12 @@ const MarksTab = ({ students, onUpdateStudent }) => {
                   Grade {selectedClass.grade} - Section {selectedClass.section}
                 </h2>
                 <p className="text-gray-500 mt-1">
-                  {selectedSectionData.studentCount} students
+                  {selectedSectionData.studentCount} students • {currentSubjects.length} subjects
                 </p>
               </div>
             </div>
             
             <div className="flex items-center space-x-3">
-              <button
-                onClick={refreshData}
-                disabled={isRefreshing}
-                className="px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 flex items-center space-x-2 disabled:opacity-50"
-              >
-                <RefreshCw size={16} className={isRefreshing ? 'animate-spin' : ''} />
-                <span>{isRefreshing ? 'Refreshing...' : 'Refresh'}</span>
-              </button>
               <button
                 onClick={() => {
                   setSubjectSetup({
@@ -617,9 +617,10 @@ const MarksTab = ({ students, onUpdateStudent }) => {
                   ? `${exam.id}_${index}` 
                   : `exam_${index}_${Date.now()}`;
                 
-                const subjects = Array.isArray(exam.subjects) && exam.subjects.length > 0
-                  ? exam.subjects
-                  : classSubjects;
+                // Use current subjects from state
+                const subjects = currentSubjects.length > 0 
+                  ? currentSubjects
+                  : (Array.isArray(exam.subjects) && exam.subjects.length > 0 ? exam.subjects : []);
                 
                 return (
                   <div 
@@ -706,14 +707,14 @@ const MarksTab = ({ students, onUpdateStudent }) => {
                         type="text"
                         value={subject.name}
                         onChange={(e) => updateSetupSubject(index, 'name', e.target.value)}
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg"
                         placeholder="Subject name"
                       />
                       <input
                         type="number"
                         value={subject.total}
                         onChange={(e) => updateSetupSubject(index, 'total', e.target.value)}
-                        className="w-24 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        className="w-24 px-3 py-2 border border-gray-300 rounded-lg"
                         placeholder="Total"
                         min="1"
                       />
@@ -886,6 +887,7 @@ const MarksTab = ({ students, onUpdateStudent }) => {
               setSelectedExamForMarks(null);
             }}
             loading={loading}
+            latestSubjects={classSubjects}
           />
         )}
       </div>
@@ -968,34 +970,64 @@ const MarksTab = ({ students, onUpdateStudent }) => {
   );
 };
 
-// Enter Marks Modal Component
-const EnterMarksModal = ({ exam, students, onSaveMarks, onClose, loading }) => {
+// Enter Marks Modal Component - FIXED to handle subject changes
+const EnterMarksModal = ({ exam, students, onSaveMarks, onClose, loading, latestSubjects }) => {
   const [marksData, setMarksData] = useState({});
   const [savedStudents, setSavedStudents] = useState({});
+
+  // Use latestSubjects if provided, otherwise use exam.subjects
+  const examSubjects = latestSubjects && latestSubjects.length > 0 
+    ? latestSubjects 
+    : (Array.isArray(exam.subjects) ? exam.subjects : []);
 
   useEffect(() => {
     const initialMarks = {};
     const saved = {};
-    const examSubjects = Array.isArray(exam.subjects) ? exam.subjects : [];
     
     students.forEach((student) => {
-      const studentMarks = exam.marks?.[student.studentId]?.marks || [];
       const studentId = student.studentId;
+      const existingMarks = exam.marks?.[studentId]?.marks || [];
       
-      if (studentMarks.length > 0) {
+      // Create a map of existing marks by subject name
+      const existingMarksMap = {};
+      existingMarks.forEach(mark => {
+        existingMarksMap[mark.name] = mark;
+      });
+      
+      // Build new marks array based on latest subjects
+      const newMarks = examSubjects.map((subject) => {
+        const existing = existingMarksMap[subject.name];
+        if (existing) {
+          // Preserve existing marks for this subject
+          return {
+            name: subject.name,
+            marks: existing.marks || '',
+            total: subject.total || 0,
+            grade: existing.grade || ''
+          };
+        } else {
+          // New subject - no marks yet
+          return {
+            name: subject.name,
+            marks: '',
+            total: subject.total || 0,
+            grade: ''
+          };
+        }
+      });
+      
+      // Check if any marks exist
+      const hasMarks = newMarks.some(m => m.marks !== '' && m.marks !== null);
+      if (hasMarks) {
         saved[studentId] = true;
-        initialMarks[studentId] = studentMarks;
-      } else {
-        initialMarks[studentId] = examSubjects.map((subject) => ({
-          name: subject.name || 'Unnamed',
-          marks: '',
-          total: subject.total || 0
-        }));
       }
+      
+      initialMarks[studentId] = newMarks;
     });
+    
     setMarksData(initialMarks);
     setSavedStudents(saved);
-  }, [exam, students]);
+  }, [exam, students, examSubjects]);
 
   const updateStudentMarks = (studentId, subjectIndex, value) => {
     setMarksData(prev => {
@@ -1043,8 +1075,6 @@ const EnterMarksModal = ({ exam, students, onSaveMarks, onClose, loading }) => {
     return 'F';
   };
 
-  const examSubjects = Array.isArray(exam.subjects) ? exam.subjects : [];
-
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl max-w-5xl w-full max-h-[90vh] overflow-y-auto">
@@ -1056,6 +1086,11 @@ const EnterMarksModal = ({ exam, students, onSaveMarks, onClose, loading }) => {
             <p className="text-sm text-gray-500">
               {students.length} students • {examSubjects.length} subjects
             </p>
+            {latestSubjects && latestSubjects.length > 0 && (
+              <p className="text-xs text-blue-600 mt-1">
+                Using latest subject configuration
+              </p>
+            )}
           </div>
           <button
             onClick={onClose}
