@@ -237,3 +237,41 @@ a:hover::after {
     display: none !important;
   }
 }
+
+/* src/index.css or your global styles */
+
+.calendar-dropdown {
+  animation: slideDown 0.2s ease-out;
+  transform-origin: top center;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: scaleY(0.8) translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: scaleY(1) translateY(0);
+  }
+}
+
+/* Scrollbar styling for attendance table */
+.attendance-table::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.attendance-table::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 10px;
+}
+
+.attendance-table::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 10px;
+}
+
+.attendance-table::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}

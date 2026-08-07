@@ -1316,6 +1316,150 @@ static async getClassExams(grade, section, forceRefresh = false) {
     this.quotaState.requestTimestamps = [];
     this.clearTokenCache();
   }
+
+
+// src/service/StudentApi.js
+
+/**
+ * Get attendance for a specific date and class - FIXED
+ */
+static async getAttendance(date, classFilter = 'all') {
+  try {
+    const params = new URLSearchParams({
+      date,
+      class: classFilter
+    });
+    
+    console.log(`📥 Fetching attendance for ${date}, class: ${classFilter}`);
+    
+    const data = await this.makeRequest(
+      `${BASE_URL}/attendance?${params.toString()}`,
+      { method: 'GET' }
+    );
+    
+    console.log('📥 Attendance API response:', data);
+    
+    // Ensure records is always an array
+    const records = data.records || [];
+    console.log(`📥 Found ${records.length} records`);
+    
+    if (records.length > 0) {
+      console.log('📥 First record sample:', records[0]);
+    }
+    
+    return {
+      success: true,
+      records: records,
+      summary: data.summary || { present: 0, absent: 0, total: 0 }
+    };
+  } catch (error) {
+    console.error('❌ Get attendance error:', error);
+    return { 
+      success: false, 
+      error: error.message || 'Could not fetch attendance',
+      records: [] 
+    };
+  }
+}
+
+/**
+ * Save attendance records - FIXED
+ */
+static async saveAttendance(attendanceData) {
+  try {
+    // CRITICAL FIX: Ensure status is preserved correctly
+    const records = attendanceData.records.map(record => {
+      // If it's a holiday record
+      if (record.isHoliday) {
+        return {
+          isHoliday: true,
+          reason: record.reason || 'Holiday',
+          class: record.class || attendanceData.class || '',
+          section: record.section || ''
+        };
+      }
+      
+      // Regular attendance - PRESERVE the status exactly as passed
+      return {
+        studentId: record.studentId,
+        status: record.status, // This is the key - keep as is
+        class: record.class || attendanceData.class || '',
+        section: record.section || '',
+        date: attendanceData.date
+      };
+    });
+
+    const payload = {
+      date: attendanceData.date,
+      records: records,
+      class: attendanceData.class || ''
+    };
+
+    console.log('📤 Sending attendance payload:', JSON.stringify(payload, null, 2));
+
+    const data = await this.makeRequest(`${BASE_URL}/attendance`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+    
+    console.log('📤 Save response:', data);
+    
+    return data;
+  } catch (error) {
+    console.error('❌ Save attendance error:', error);
+    return { 
+      success: false, 
+      error: error.message || 'Could not save attendance' 
+    };
+  }
+}
+
+static async saveAttendance(attendanceData) {
+  try {
+    // CRITICAL FIX: Ensure status is preserved correctly
+    const records = attendanceData.records.map(record => {
+      // If it's a holiday record
+      if (record.isHoliday) {
+        return {
+          isHoliday: true,
+          reason: record.reason || 'Holiday',
+          class: record.class || attendanceData.class || '',
+          section: record.section || ''
+        };
+      }
+      
+      // Regular attendance - PRESERVE the status exactly as passed
+      return {
+        studentId: record.studentId,
+        status: record.status, // This is the key - keep as is
+        class: record.class || attendanceData.class || '',
+        section: record.section || '',
+        date: attendanceData.date
+      };
+    });
+
+    const payload = {
+      date: attendanceData.date,
+      records: records,
+      class: attendanceData.class || ''
+    };
+
+    console.log('📤 Sending attendance payload:', JSON.stringify(payload, null, 2));
+
+    const data = await this.makeRequest(`${BASE_URL}/attendance`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+    
+    return data;
+  } catch (error) {
+    console.error('❌ Save attendance error:', error);
+    return { 
+      success: false, 
+      error: error.message || 'Could not save attendance' 
+    };
+  }
+}
 }
 
 export default StudentApi;
