@@ -1,5 +1,3 @@
-// src/components/dashboard/Dashboard.jsx
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { LogOut, Users, UserPlus, List, BarChart3, Search, DollarSign, Award, Ticket, School, MapPin, Award as AwardIcon, Edit, X, Save, Loader, Building, Mail, Phone, Calendar } from 'lucide-react';
 import StudentList from '../Components/StudentList';
@@ -37,7 +35,6 @@ const Dashboard = ({ user, onLogout }) => {
   // Hall ticket data state
   const [studentHallTicketData, setStudentHallTicketData] = useState({});
 
-  // ⭐ NEW: Refresh triggers for MarksCard and MarksTab
   const [refreshMarksCard, setRefreshMarksCard] = useState(0);
   const [subjectRefreshTrigger, setSubjectRefreshTrigger] = useState(0);
 
@@ -54,7 +51,7 @@ const Dashboard = ({ user, onLogout }) => {
 
   const navigate = useNavigate();
 
-  // ⭐ NEW: Function to trigger MarksTab refresh (called when subjects change)
+  // Function to trigger MarksTab refresh (called when subjects change)
   const handleSubjectRefresh = useCallback(() => {
     setSubjectRefreshTrigger(prev => prev + 1);
     console.log('🔄 Subject refresh triggered, MarksCard will reload');
@@ -578,6 +575,9 @@ const Dashboard = ({ user, onLogout }) => {
           <StudentAttendance
             students={students}
             onUpdateStudent={handleUpdateStudent}
+            hallTicketData={studentHallTicketData}
+            getHallTicketData={getHallTicketData}
+
           />
         ) : activeTab === 'teacherAttendance' ? (
           <TeachersAttendance />
@@ -590,7 +590,7 @@ const Dashboard = ({ user, onLogout }) => {
             getHallTicketData={getHallTicketData}
             onRefreshHallTickets={loadHallTicketsForStudents}
             refreshTrigger={refreshMarksCard}
-            subjectRefreshTrigger={subjectRefreshTrigger}  // ⭐ ADD THIS
+            subjectRefreshTrigger={subjectRefreshTrigger}  
           />
         ) : activeTab === 'addStudent' ? (
           <AddStudent
@@ -613,7 +613,7 @@ const Dashboard = ({ user, onLogout }) => {
           <MarksTab
             students={students}
             onUpdateStudent={handleStudentUpdate}
-            onRefreshMarksCard={handleSubjectRefresh}  // ⭐ ADD THIS
+            onRefreshMarksCard={handleSubjectRefresh}  
           />
         ) : activeTab === 'assessment' ? (
           <AssessmentTab

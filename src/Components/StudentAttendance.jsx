@@ -18,7 +18,10 @@ import {
   ChevronLeft,
   ChevronRight,
   Search,
-  BarChart3
+  BarChart3,
+  CalendarDays,
+  Download,
+  ChevronDown
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import StudentApi from '../service/StudentApi';
@@ -27,7 +30,7 @@ import StudentApi from '../service/StudentApi';
 // Calendar Component
 // ────────────────────────────────────────────────
 
-const Calendar = ({ selectedDate, onDateSelect, onClose }) => {
+const Calendar = ({ selectedDate, onDateSelect, onClose, holidayDates = {} }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [view, setView] = useState('month');
   
@@ -89,6 +92,11 @@ const Calendar = ({ selectedDate, onDateSelect, onClose }) => {
     if (!selectedDate) return false;
     const [selYear, selMonth, selDay] = selectedDate.split('-').map(Number);
     return day === selDay && month === selMonth - 1 && year === selYear;
+  };
+
+  const isHoliday = (day, month, year) => {
+    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    return holidayDates[dateStr] === true;
   };
 
   const handleDateClick = (day, month, year) => {
@@ -198,27 +206,48 @@ const Calendar = ({ selectedDate, onDateSelect, onClose }) => {
             {days.map(({ day, month, year, isCurrentMonth }, index) => {
               const isTodayDate = isToday(day, month, year);
               const isSelectedDate = isSelected(day, month, year);
+              const isHolidayDate = isHoliday(day, month, year);
               
               return (
                 <button
                   key={index}
                   onClick={() => handleDateClick(day, month, year)}
                   className={`
-                    aspect-square flex items-center justify-center rounded-lg text-sm transition
+                    aspect-square flex items-center justify-center rounded-lg text-sm transition relative
                     ${isSelectedDate 
                       ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-md shadow-indigo-200' 
-                      : isTodayDate 
-                        ? 'bg-indigo-50 text-indigo-600 font-bold hover:bg-indigo-100 border-2 border-indigo-300' 
-                        : isCurrentMonth 
-                          ? 'text-gray-700 hover:bg-gray-100' 
-                          : 'text-gray-300 hover:bg-gray-50'
+                      : isHolidayDate
+                        ? 'bg-amber-100 text-amber-700 hover:bg-amber-200 border-2 border-amber-300'
+                        : isTodayDate 
+                          ? 'bg-indigo-50 text-indigo-600 font-bold hover:bg-indigo-100 border-2 border-indigo-300' 
+                          : isCurrentMonth 
+                            ? 'text-gray-700 hover:bg-gray-100' 
+                            : 'text-gray-300 hover:bg-gray-50'
                     }
                   `}
                 >
                   {day}
+                  {isHolidayDate && (
+                    <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-amber-500 rounded-full"></span>
+                  )}
                 </button>
               );
             })}
+          </div>
+
+          <div className="flex items-center justify-center gap-4 px-2 pb-2 text-xs text-gray-500">
+            <span className="flex items-center gap-1">
+              <span className="w-3 h-3 bg-amber-100 border border-amber-300 rounded"></span>
+              Holiday
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="w-3 h-3 bg-indigo-600 rounded"></span>
+              Selected
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="w-3 h-3 bg-indigo-50 border-2 border-indigo-300 rounded"></span>
+              Today
+            </span>
           </div>
         </>
       ) : (
@@ -253,8 +282,12 @@ const Calendar = ({ selectedDate, onDateSelect, onClose }) => {
 // Main Attendance Component
 // ────────────────────────────────────────────────
 
-const StudentAttendance = ({ students, onUpdateStudent }) => {
-  // ─── State ────────────────────────────────────
+const StudentAttendance = ({ 
+  students, 
+  onUpdateStudent,
+  hallTicketData: propHallTicketData = {},
+  getHallTicketData = null
+}) => {
   const [selectedClass, setSelectedClass] = useState('');
   const [selectedSection, setSelectedSection] = useState('');
   const [classList, setClassList] = useState([]);
@@ -262,9 +295,8 @@ const StudentAttendance = ({ students, onUpdateStudent }) => {
   
   const [selectedDateStr, setSelectedDateStr] = useState('');
   const [showCalendar, setShowCalendar] = useState(false);
+  const [holidayDates, setHolidayDates] = useState({});
   
-  // CRITICAL FIX: attendanceData stores status for each student
-  // Default is null (not marked), then 'present' or 'absent'
   const [attendanceData, setAttendanceData] = useState({});
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -283,46 +315,75 @@ const StudentAttendance = ({ students, onUpdateStudent }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   
+  // State for hall ticket data
+  const [hallTicketDataMap, setHallTicketDataMap] = useState({});
+  const [hallTicketsLoaded, setHallTicketsLoaded] = useState(false);
+  
+  // Monthly export states
+  const [showMonthlyExport, setShowMonthlyExport] = useState(false);
+  const [exportMonth, setExportMonth] = useState('');
+  const [exportYear, setExportYear] = useState('');
+  const [isExportingMonthly, setIsExportingMonthly] = useState(false);
+  
   const loadTimeoutRef = useRef(null);
   const calendarRef = useRef(null);
+  const monthlyExportRef = useRef(null);
 
-  // ─── Derived State ──────────────────────────
   const isClassSelected = selectedClass && selectedSection;
   const todayStr = new Date().toISOString().split('T')[0];
-
-  const filteredStudents = useMemo(() => {
-    let filtered = classStudents;
-    
-    if (searchTerm.trim()) {
-      const term = searchTerm.toLowerCase().trim();
-      filtered = filtered.filter(student => {
-        const name = getStudentName(student).toLowerCase();
-        const rollNo = getStudentRollNo(student).toLowerCase();
-        return name.includes(term) || rollNo.includes(term);
-      });
-    }
-    
-    if (filterStatus !== 'all') {
-      filtered = filtered.filter(student => {
-        const status = attendanceData[student.studentId];
-        if (filterStatus === 'unmarked') {
-          return !status || status === 'unmarked';
-        }
-        return status === filterStatus;
-      });
-    }
-    
-    return filtered;
-  }, [classStudents, searchTerm, filterStatus, attendanceData]);
 
   // ─── Helper Functions ──────────────────────
   const getStudentName = (student) => {
     return student.name || student.basicInfo?.name || student.studentName || 'Unknown';
   };
 
-  const getStudentRollNo = (student) => {
-    return student.rollNumber || student.rollNo || student.basicInfo?.admissionNo || '-';
-  };
+  // ⭐ Get roll number from hall ticket data
+  const getRollNumber = useCallback((student) => {
+    if (!student) return '-';
+    
+    const studentId = student.studentId;
+    
+    // 1. Check hallTicketDataMap (fetched silently)
+    if (hallTicketDataMap && hallTicketDataMap[studentId]) {
+      const rollNum = hallTicketDataMap[studentId].rollNumber;
+      if (rollNum) {
+        return rollNum;
+      }
+    }
+    
+    // 2. Check propHallTicketData (from parent)
+    if (propHallTicketData && propHallTicketData[studentId]) {
+      const rollNum = propHallTicketData[studentId].rollNumber;
+      if (rollNum) {
+        return rollNum;
+      }
+    }
+    
+    // 3. Use getHallTicketData function
+    if (getHallTicketData) {
+      const data = getHallTicketData(studentId);
+      if (data && data.rollNumber) {
+        return data.rollNumber;
+      }
+    }
+    
+    // 4. Check if roll number is directly on student
+    if (student.rollNumber) {
+      return student.rollNumber;
+    }
+    
+    // 5. Check basicInfo
+    if (student.basicInfo?.rollNumber) {
+      return student.basicInfo.rollNumber;
+    }
+    
+    // 6. Fallback to admission number
+    if (student.basicInfo?.admissionNo) {
+      return student.basicInfo.admissionNo;
+    }
+    
+    return '-';
+  }, [hallTicketDataMap, propHallTicketData, getHallTicketData]);
 
   const getStatusInfo = (status) => {
     if (status === 'present') {
@@ -345,6 +406,74 @@ const StudentAttendance = ({ students, onUpdateStudent }) => {
       };
     }
   };
+
+  const filteredStudents = useMemo(() => {
+    let filtered = classStudents;
+    
+    if (searchTerm.trim()) {
+      const term = searchTerm.toLowerCase().trim();
+      filtered = filtered.filter(student => {
+        const name = getStudentName(student).toLowerCase();
+        const rollNo = getRollNumber(student).toLowerCase();
+        return name.includes(term) || rollNo.includes(term);
+      });
+    }
+    
+    if (filterStatus !== 'all') {
+      filtered = filtered.filter(student => {
+        const status = attendanceData[student.studentId];
+        if (filterStatus === 'unmarked') {
+          return !status || status === 'unmarked';
+        }
+        return status === filterStatus;
+      });
+    }
+    
+    return filtered;
+  }, [classStudents, searchTerm, filterStatus, attendanceData]);
+
+  // ─── Load Hall Tickets Silently ──────────────────────
+  const loadHallTicketsForClass = useCallback(async () => {
+    if (classStudents.length === 0) {
+      setHallTicketsLoaded(true);
+      return;
+    }
+    
+    try {
+      const dataMap = {};
+      
+      // Load all hall tickets in parallel
+      const promises = classStudents.map(async (student) => {
+        try {
+          const result = await StudentApi.getHallTicket(student.studentId);
+          if (result.success && result.hallTicket) {
+            const data = result.hallTicket.hallTicketData || {};
+            dataMap[student.studentId] = {
+              rollNumber: data.rollNumber || '',
+              studentName: data.studentName || '',
+              studentClass: data.studentClass || '',
+              section: data.section || '',
+              ...data
+            };
+            if (data.rollNumber) {
+              console.log(`📋 Found hall ticket for ${student.studentId} with roll number: ${data.rollNumber}`);
+            }
+          }
+        } catch (error) {
+          console.log(`No hall ticket found for student ${student.studentId}`);
+        }
+      });
+      
+      await Promise.all(promises);
+      
+      setHallTicketDataMap(dataMap);
+      setHallTicketsLoaded(true);
+      console.log(`✅ Loaded ${Object.keys(dataMap).length} hall tickets silently`);
+    } catch (error) {
+      console.error('Error loading hall tickets:', error);
+      setHallTicketsLoaded(true);
+    }
+  }, [classStudents]);
 
   // ─── Effects ──────────────────────────────────
   useEffect(() => {
@@ -376,15 +505,36 @@ const StudentAttendance = ({ students, onUpdateStudent }) => {
     }
   }, [selectedClass, selectedSection, students]);
 
+  // ⭐ Load hall tickets silently when class students change
   useEffect(() => {
-    if (selectedDateStr && selectedClass && selectedSection && classStudents.length > 0) {
+    if (classStudents.length > 0) {
+      // Reset states
+      setHasLoaded(false);
+      setAttendanceData({});
+      setHallTicketsLoaded(false);
+      
+      // Load hall tickets silently in background
+      loadHallTicketsForClass().then(() => {
+        // After hall tickets are loaded, load attendance
+        if (selectedDateStr) {
+          loadAttendance();
+        }
+      });
+    } else {
+      setHallTicketsLoaded(true);
+    }
+  }, [classStudents]);
+
+  // ⭐ Load attendance when hall tickets are loaded and date changes
+  useEffect(() => {
+    if (selectedDateStr && hallTicketsLoaded && classStudents.length > 0) {
       if (!hasLoaded) {
         if (loadTimeoutRef.current) {
           clearTimeout(loadTimeoutRef.current);
         }
         loadTimeoutRef.current = setTimeout(() => {
           loadAttendance();
-        }, 300);
+        }, 100);
       }
     }
     
@@ -393,7 +543,7 @@ const StudentAttendance = ({ students, onUpdateStudent }) => {
         clearTimeout(loadTimeoutRef.current);
       }
     };
-  }, [selectedDateStr, selectedClass, selectedSection, classStudents.length]);
+  }, [selectedDateStr, hallTicketsLoaded, classStudents.length]);
 
   useEffect(() => {
     const present = Object.values(attendanceData).filter(v => v === 'present').length;
@@ -417,26 +567,32 @@ const StudentAttendance = ({ students, onUpdateStudent }) => {
       if (calendarRef.current && !calendarRef.current.contains(event.target)) {
         setShowCalendar(false);
       }
+      if (monthlyExportRef.current && !monthlyExportRef.current.contains(event.target)) {
+        setShowMonthlyExport(false);
+      }
     };
     
-    if (showCalendar) {
+    if (showCalendar || showMonthlyExport) {
       document.addEventListener('mousedown', handleClickOutside);
       return () => {
         document.removeEventListener('mousedown', handleClickOutside);
       };
     }
-  }, [showCalendar]);
+  }, [showCalendar, showMonthlyExport]);
 
   useEffect(() => {
     if (!selectedDateStr) {
       setSelectedDateStr(todayStr);
     }
+    const now = new Date();
+    setExportMonth(String(now.getMonth() + 1).padStart(2, '0'));
+    setExportYear(String(now.getFullYear()));
   }, []);
 
   // ─── API Functions ──────────────────────────
   
   const loadAttendance = useCallback(async () => {
-    if (!selectedDateStr || !selectedClass || !selectedSection) {
+    if (!selectedDateStr || !selectedClass || !selectedSection || !hallTicketsLoaded) {
       return;
     }
 
@@ -453,31 +609,37 @@ const StudentAttendance = ({ students, onUpdateStudent }) => {
         throw new Error(result.error || 'Failed to load attendance');
       }
       
-      // Check for holiday
       if (result.records && result.records.length > 0 && result.records[0].isHoliday === true) {
         const holidayRecord = result.records[0];
         setIsHoliday(true);
         setHolidayReason(holidayRecord.reason || 'Holiday');
         setAttendanceData({});
         setHasLoaded(true);
-        toast.info(`📅 Holiday: ${holidayRecord.reason || 'Holiday'}`);
+        
+        setHolidayDates(prev => ({
+          ...prev,
+          [selectedDateStr]: true
+        }));
+        
+        toast.info(` Holiday: ${holidayRecord.reason || 'Holiday'}`);
         setIsLoading(false);
         return;
       }
 
-      // Not a holiday
       setIsHoliday(false);
       setHolidayReason('');
+      setHolidayDates(prev => {
+        const updated = { ...prev };
+        delete updated[selectedDateStr];
+        return updated;
+      });
       
-      // Build attendance map from loaded records
       const attendanceMap = {};
       
-      // CRITICAL FIX: Set all students to null (unmarked) initially
       classStudents.forEach(student => {
         attendanceMap[student.studentId] = null;
       });
       
-      // Then override with loaded attendance data
       if (result.records && result.records.length > 0) {
         console.log('📥 Processing records from API:', result.records);
         
@@ -493,20 +655,19 @@ const StudentAttendance = ({ students, onUpdateStudent }) => {
         });
       }
       
-      console.log('📥 Final attendance map:', attendanceMap);
       setAttendanceData(attendanceMap);
       setHasLoaded(true);
       
       const presentCount = Object.values(attendanceMap).filter(v => v === 'present').length;
       const absentCount = Object.values(attendanceMap).filter(v => v === 'absent').length;
       const unmarkedCount = Object.values(attendanceMap).filter(v => !v || v === 'unmarked').length;
+      
       toast.success(`Attendance loaded: ${presentCount} present, ${absentCount} absent, ${unmarkedCount} unmarked`);
       
     } catch (error) {
       console.error('Error loading attendance:', error);
       toast.error('Failed to load attendance: ' + (error.message || 'Unknown error'));
       
-      // Set default state to unmarked
       const defaultAttendance = {};
       classStudents.forEach(student => {
         defaultAttendance[student.studentId] = null;
@@ -516,7 +677,24 @@ const StudentAttendance = ({ students, onUpdateStudent }) => {
     } finally {
       setIsLoading(false);
     }
-  }, [selectedDateStr, selectedClass, selectedSection, classStudents]);
+  }, [selectedDateStr, selectedClass, selectedSection, classStudents, hallTicketsLoaded]);
+
+  // ⭐ Manual refresh function
+  const handleRefresh = useCallback(async () => {
+    if (!isClassSelected) return;
+    
+    setIsLoading(true);
+    try {
+      // Reload hall tickets silently
+      await loadHallTicketsForClass();
+      // Then reload attendance
+      await loadAttendance();
+    } catch (error) {
+      console.error('Refresh error:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [isClassSelected, loadHallTicketsForClass, loadAttendance]);
 
   const saveAttendance = async () => {
     if (!selectedDateStr || !selectedClass || !selectedSection) {
@@ -541,7 +719,6 @@ const StudentAttendance = ({ students, onUpdateStudent }) => {
           section: selectedSection
         }];
       } else {
-        // CRITICAL FIX: Only save students who have been marked (status is not null)
         records = classStudents
           .filter(student => {
             const status = attendanceData[student.studentId];
@@ -550,7 +727,7 @@ const StudentAttendance = ({ students, onUpdateStudent }) => {
           .map(student => {
             return {
               studentId: student.studentId,
-              status: attendanceData[student.studentId], // 'present' or 'absent'
+              status: attendanceData[student.studentId],
               class: selectedClass,
               section: selectedSection
             };
@@ -563,22 +740,28 @@ const StudentAttendance = ({ students, onUpdateStudent }) => {
         return;
       }
 
-      console.log('📤 Saving attendance payload:', { 
-        date: selectedDateStr, 
-        records: records, 
-        class: `${selectedClass}-${selectedSection}` 
-      });
-
       const result = await StudentApi.saveAttendance({
         date: selectedDateStr,
         records: records,
         class: `${selectedClass}-${selectedSection}`
       });
 
-      console.log('📤 Save result:', result);
-
       if (result.success) {
         toast.success(isHoliday ? 'Holiday marked successfully!' : `Attendance saved for ${records.length} students!`);
+        
+        if (isHoliday) {
+          setHolidayDates(prev => ({
+            ...prev,
+            [selectedDateStr]: true
+          }));
+        } else {
+          setHolidayDates(prev => {
+            const updated = { ...prev };
+            delete updated[selectedDateStr];
+            return updated;
+          });
+        }
+        
         await loadAttendance();
         if (onUpdateStudent) {
           onUpdateStudent();
@@ -594,7 +777,10 @@ const StudentAttendance = ({ students, onUpdateStudent }) => {
     }
   };
 
-  const exportAttendance = async () => {
+  // ─── Export Functions ──────────────────────
+
+  // Daily Export
+  const exportDailyAttendance = async () => {
     if (!selectedDateStr || !selectedClass || !selectedSection) {
       toast.warning('Please select class, section, and date');
       return;
@@ -607,6 +793,8 @@ const StudentAttendance = ({ students, onUpdateStudent }) => {
 
     setIsExporting(true);
     try {
+      const formattedDate = selectedDateStr;
+      
       const headers = ['S.No', 'Roll No', 'Student Name', 'Class', 'Section', 'Date', 'Status'];
       
       const rows = classStudents.map((student, index) => {
@@ -614,11 +802,11 @@ const StudentAttendance = ({ students, onUpdateStudent }) => {
         const statusDisplay = status === 'present' ? 'Present' : status === 'absent' ? 'Absent' : 'Unmarked';
         return [
           index + 1,
-          getStudentRollNo(student),
+          getRollNumber(student),
           getStudentName(student),
           selectedClass,
           selectedSection,
-          selectedDateStr,
+          formattedDate,
           statusDisplay
         ];
       });
@@ -627,12 +815,22 @@ const StudentAttendance = ({ students, onUpdateStudent }) => {
         rows.push([
           '-',
           '-',
-          '📍 HOLIDAY',
+          'HOLIDAY',
           selectedClass,
           selectedSection,
-          selectedDateStr,
+          formattedDate,
           holidayReason || 'Holiday'
         ]);
+      }
+
+      rows.push([]);
+      rows.push(['Summary', '', '', '', '', '', '']);
+      rows.push(['Total Students', classStudents.length, '', '', '', '', '']);
+      rows.push(['Present', attendanceStats.present, '', '', '', '', '']);
+      rows.push(['Absent', attendanceStats.absent, '', '', '', '', '']);
+      rows.push(['Unmarked', attendanceStats.unmarked, '', '', '', '', '']);
+      if (attendanceStats.present + attendanceStats.absent > 0) {
+        rows.push(['Attendance %', attendanceStats.percentage + '%', '', '', '', '', '']);
       }
 
       const csvContent = [
@@ -640,17 +838,18 @@ const StudentAttendance = ({ students, onUpdateStudent }) => {
         ...rows.map(row => row.join(','))
       ].join('\n');
 
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
       const link = document.createElement('a');
       const url = URL.createObjectURL(blob);
+      const fileName = `daily_attendance_${selectedClass}_${selectedSection}_${selectedDateStr}.csv`;
       link.setAttribute('href', url);
-      link.setAttribute('download', `attendance_${selectedClass}-${selectedSection}_${selectedDateStr}.csv`);
+      link.setAttribute('download', fileName);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
       
-      toast.success('Attendance exported successfully!');
+      toast.success('Daily attendance exported successfully!');
     } catch (error) {
       console.error('Export error:', error);
       toast.error('Failed to export attendance');
@@ -659,15 +858,131 @@ const StudentAttendance = ({ students, onUpdateStudent }) => {
     }
   };
 
+  // Monthly Export
+  const exportMonthlyAttendance = async () => {
+    if (!selectedClass || !selectedSection) {
+      toast.warning('Please select class and section');
+      return;
+    }
+
+    if (!exportMonth || !exportYear) {
+      toast.warning('Please select month and year');
+      return;
+    }
+
+    setIsExportingMonthly(true);
+    try {
+      const month = `${exportYear}-${exportMonth}`;
+      const daysInMonth = new Date(parseInt(exportYear), parseInt(exportMonth), 0).getDate();
+      
+      const studentsInClass = students.filter(student => {
+        const grade = student.class || student.basicInfo?.grade || student.grade;
+        const section = student.section || student.basicInfo?.section;
+        return grade === selectedClass && section === selectedSection;
+      });
+
+      if (studentsInClass.length === 0) {
+        toast.warning('No students in this class/section');
+        setIsExportingMonthly(false);
+        return;
+      }
+
+      const headers = ['S.No', 'Roll No', 'Student Name'];
+      const dateHeaders = [];
+      for (let day = 1; day <= daysInMonth; day++) {
+        const dateStr = `${exportYear}-${exportMonth}-${String(day).padStart(2, '0')}`;
+        dateHeaders.push(dateStr);
+      }
+      const fullHeaders = [...headers, ...dateHeaders, 'Present Days', 'Absent Days', 'Attendance %'];
+
+      const rows = [];
+      for (let studentIndex = 0; studentIndex < studentsInClass.length; studentIndex++) {
+        const student = studentsInClass[studentIndex];
+        const row = [
+          studentIndex + 1,
+          getRollNumber(student),
+          getStudentName(student)
+        ];
+
+        let presentCount = 0;
+        let absentCount = 0;
+        let totalDays = 0;
+
+        for (let day = 1; day <= daysInMonth; day++) {
+          const dateStr = `${exportYear}-${exportMonth}-${String(day).padStart(2, '0')}`;
+          try {
+            const result = await StudentApi.getAttendance(dateStr, `${selectedClass}-${selectedSection}`);
+            let status = '-';
+            
+            if (result.success && result.records) {
+              const holidayRecord = result.records.find(r => r.isHoliday === true);
+              if (holidayRecord) {
+                status = 'H';
+              } else {
+                const record = result.records.find(r => r.studentId === student.studentId);
+                if (record) {
+                  if (record.status === 'present') {
+                    status = 'P';
+                    presentCount++;
+                    totalDays++;
+                  } else if (record.status === 'absent') {
+                    status = 'A';
+                    absentCount++;
+                    totalDays++;
+                  }
+                }
+              }
+            }
+            row.push(status);
+          } catch (error) {
+            console.error(`Error fetching attendance for ${dateStr}:`, error);
+            row.push('E');
+          }
+        }
+
+        const totalMarked = presentCount + absentCount;
+        const percentage = totalMarked > 0 ? Math.round((presentCount / totalMarked) * 100) : 0;
+        row.push(presentCount, absentCount, percentage + '%');
+        rows.push(row);
+      }
+
+      rows.push([]);
+      const summaryRow = ['', '', 'SUMMARY'];
+      const emptyDays = Array(daysInMonth).fill('');
+      rows.push([...summaryRow, ...emptyDays, '', '', '']);
+
+      const csvContent = [
+        fullHeaders.join(','),
+        ...rows.map(row => row.join(','))
+      ].join('\n');
+
+      const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      const fileName = `monthly_attendance_${selectedClass}_${selectedSection}_${exportYear}-${exportMonth}.csv`;
+      link.setAttribute('href', url);
+      link.setAttribute('download', fileName);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      
+      toast.success(`Monthly attendance exported successfully!`);
+    } catch (error) {
+      console.error('Monthly export error:', error);
+      toast.error('Failed to export monthly attendance: ' + (error.message || 'Unknown error'));
+    } finally {
+      setIsExportingMonthly(false);
+      setShowMonthlyExport(false);
+    }
+  };
+
   // ─── UI Actions ─────────────────────────────
-  
-  // CRITICAL FIX: Set status for a student
   const setStudentStatus = (studentId, status) => {
     if (isHoliday) {
       toast.warning('Cannot modify attendance on a holiday');
       return;
     }
-    console.log(`🔄 Setting ${studentId} to ${status}`);
     setAttendanceData(prev => ({
       ...prev,
       [studentId]: status
@@ -738,6 +1053,11 @@ const StudentAttendance = ({ students, onUpdateStudent }) => {
         defaultAttendance[student.studentId] = null;
       });
       setAttendanceData(defaultAttendance);
+      setHolidayDates(prev => {
+        const updated = { ...prev };
+        delete updated[selectedDateStr];
+        return updated;
+      });
       toast.info('Holiday mode deactivated');
     } else {
       setIsHoliday(true);
@@ -752,7 +1072,10 @@ const StudentAttendance = ({ students, onUpdateStudent }) => {
     setShowCalendar(false);
   };
 
-  // ─── Render ──────────────────────────────────
+  // ────────────────────────────────────────────────
+  // RENDER
+  // ────────────────────────────────────────────────
+
   return (
     <div className="bg-white rounded-xl shadow-lg overflow-hidden">
       {/* Header */}
@@ -769,7 +1092,7 @@ const StudentAttendance = ({ students, onUpdateStudent }) => {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <button
-              onClick={loadAttendance}
+              onClick={handleRefresh}
               disabled={!isClassSelected || isLoading}
               className="px-3 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg flex items-center gap-2 transition disabled:opacity-50 text-sm"
             >
@@ -780,7 +1103,7 @@ const StudentAttendance = ({ students, onUpdateStudent }) => {
               onClick={() => setShowCalendar(!showCalendar)}
               className="px-3 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg flex items-center gap-2 transition text-sm"
             >
-              <CalendarIcon size={16} />
+              <CalendarDays size={16} />
               Calendar
             </button>
           </div>
@@ -790,7 +1113,7 @@ const StudentAttendance = ({ students, onUpdateStudent }) => {
       {/* Main Content */}
       <div className="p-6">
         {/* Filters Row */}
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-6 gap-4 mb-6">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">
               <School size={15} className="inline mr-1" />
@@ -803,6 +1126,8 @@ const StudentAttendance = ({ students, onUpdateStudent }) => {
                 setHasLoaded(false);
                 setAttendanceData({});
                 setIsHoliday(false);
+                setHallTicketDataMap({});
+                setHallTicketsLoaded(false);
               }}
               className="w-full border border-gray-300 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white"
             >
@@ -825,6 +1150,8 @@ const StudentAttendance = ({ students, onUpdateStudent }) => {
                 setHasLoaded(false);
                 setAttendanceData({});
                 setIsHoliday(false);
+                setHallTicketDataMap({});
+                setHallTicketsLoaded(false);
               }}
               className="w-full border border-gray-300 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white"
             >
@@ -864,6 +1191,7 @@ const StudentAttendance = ({ students, onUpdateStudent }) => {
                   selectedDate={selectedDateStr}
                   onDateSelect={handleDateSelect}
                   onClose={() => setShowCalendar(false)}
+                  holidayDates={holidayDates}
                 />
               </div>
             )}
@@ -886,17 +1214,88 @@ const StudentAttendance = ({ students, onUpdateStudent }) => {
 
           <div className="flex items-end">
             <button
-              onClick={exportAttendance}
+              onClick={exportDailyAttendance}
               disabled={!isClassSelected || isExporting || isLoading || classStudents.length === 0}
-              className="w-full px-4 py-2.5 text-sm bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition flex items-center justify-center gap-2 disabled:opacity-50"
+              className="w-full px-4 py-2.5 text-sm bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition flex items-center justify-center gap-2 disabled:opacity-50"
             >
               {isExporting ? (
                 <Loader size={18} className="animate-spin" />
               ) : (
                 <FileSpreadsheet size={18} />
               )}
-              Export CSV
+              Daily Export
             </button>
+          </div>
+
+          <div className="flex items-end relative" ref={monthlyExportRef}>
+            <button
+              onClick={() => setShowMonthlyExport(!showMonthlyExport)}
+              disabled={!isClassSelected || isLoading}
+              className="w-full px-4 py-2.5 text-sm bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              <Download size={18} />
+              Monthly Export
+              <ChevronDown size={16} className={showMonthlyExport ? 'rotate-180' : ''} />
+            </button>
+
+            {showMonthlyExport && (
+              <div className="absolute top-full left-0 mt-2 z-50 bg-white rounded-xl shadow-2xl border border-gray-200 p-4 w-64">
+                <h4 className="text-sm font-semibold text-gray-700 mb-3">Select Month</h4>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Month</label>
+                    <select
+                      value={exportMonth}
+                      onChange={(e) => setExportMonth(e.target.value)}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    >
+                      {Array.from({ length: 12 }, (_, i) => {
+                        const month = String(i + 1).padStart(2, '0');
+                        return (
+                          <option key={month} value={month}>
+                            {new Date(2000, i, 1).toLocaleString('default', { month: 'long' })}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Year</label>
+                    <select
+                      value={exportYear}
+                      onChange={(e) => setExportYear(e.target.value)}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    >
+                      {Array.from({ length: 5 }, (_, i) => {
+                        const year = new Date().getFullYear() - i;
+                        return (
+                          <option key={year} value={year}>
+                            {year}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+                  <button
+                    onClick={exportMonthlyAttendance}
+                    disabled={isExportingMonthly}
+                    className="w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    {isExportingMonthly ? (
+                      <>
+                        <Loader size={16} className="animate-spin" />
+                        Exporting...
+                      </>
+                    ) : (
+                      <>
+                        <Download size={16} />
+                        Export Monthly
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -907,7 +1306,7 @@ const StudentAttendance = ({ students, onUpdateStudent }) => {
               <Gift size={24} className="text-amber-600 flex-shrink-0" />
               <input
                 type="text"
-                placeholder="Enter holiday reason (e.g., Republic Day, Summer Vacation)..."
+                placeholder="Enter holiday reason..."
                 value={holidayReason}
                 onChange={(e) => setHolidayReason(e.target.value)}
                 className="flex-1 border border-amber-300 bg-white rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent"
@@ -919,37 +1318,25 @@ const StudentAttendance = ({ students, onUpdateStudent }) => {
         {/* Main Content Area */}
         {isClassSelected ? (
           <>
-            {isHoliday && (
-              <div className="bg-amber-50 border border-amber-300 rounded-lg p-4 mb-4 flex items-center gap-3 animate-fadeIn">
-                <Gift size={24} className="text-amber-600 flex-shrink-0" />
-                <div>
-                  <p className="font-semibold text-amber-800">Holiday</p>
-                  <p className="text-sm text-amber-700">{holidayReason || 'No classes today'}</p>
-                </div>
-              </div>
-            )}
-
+            {/* Stats */}
             {!isHoliday && (
               <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
                 <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-center">
                   <div className="text-2xl font-bold text-emerald-600">{attendanceStats.present}</div>
                   <div className="text-xs text-emerald-700 font-medium flex items-center justify-center gap-1">
-                    <UserCheck size={12} />
-                    Present
+                    <UserCheck size={12} /> Present
                   </div>
                 </div>
                 <div className="bg-rose-50 border border-rose-200 rounded-lg p-3 text-center">
                   <div className="text-2xl font-bold text-rose-600">{attendanceStats.absent}</div>
                   <div className="text-xs text-rose-700 font-medium flex items-center justify-center gap-1">
-                    <UserX size={12} />
-                    Absent
+                    <UserX size={12} /> Absent
                   </div>
                 </div>
                 <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-center">
                   <div className="text-2xl font-bold text-gray-600">{attendanceStats.unmarked}</div>
                   <div className="text-xs text-gray-700 font-medium flex items-center justify-center gap-1">
-                    <AlertCircle size={12} />
-                    Unmarked
+                    <AlertCircle size={12} /> Unmarked
                   </div>
                 </div>
                 <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3 text-center">
@@ -959,20 +1346,19 @@ const StudentAttendance = ({ students, onUpdateStudent }) => {
                       : '-'}
                   </div>
                   <div className="text-xs text-indigo-700 font-medium flex items-center justify-center gap-1">
-                    <BarChart3 size={12} />
-                    Rate
+                    <BarChart3 size={12} /> Rate
                   </div>
                 </div>
                 <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-center">
                   <div className="text-2xl font-bold text-gray-600">{classStudents.length}</div>
                   <div className="text-xs text-gray-700 font-medium flex items-center justify-center gap-1">
-                    <Users size={12} />
-                    Total
+                    <Users size={12} /> Total
                   </div>
                 </div>
               </div>
             )}
 
+            {/* Action Buttons */}
             {!isHoliday && (
               <div className="flex flex-wrap items-center gap-2 mb-4">
                 <button
@@ -980,24 +1366,21 @@ const StudentAttendance = ({ students, onUpdateStudent }) => {
                   disabled={!selectedDateStr || isLoading}
                   className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-sm rounded-lg transition flex items-center gap-1.5 disabled:opacity-50"
                 >
-                  <CheckCircle size={14} />
-                  All Present
+                  <CheckCircle size={14} /> All Present
                 </button>
                 <button
                   onClick={markAllAbsent}
                   disabled={!selectedDateStr || isLoading}
                   className="px-3 py-1.5 bg-rose-500 hover:bg-rose-600 text-white text-sm rounded-lg transition flex items-center gap-1.5 disabled:opacity-50"
                 >
-                  <XCircle size={14} />
-                  All Absent
+                  <XCircle size={14} /> All Absent
                 </button>
                 <button
                   onClick={clearAllMarks}
                   disabled={!selectedDateStr || isLoading}
                   className="px-3 py-1.5 bg-gray-400 hover:bg-gray-500 text-white text-sm rounded-lg transition flex items-center gap-1.5 disabled:opacity-50"
                 >
-                  <RefreshCw size={14} />
-                  Clear All
+                  <RefreshCw size={14} /> Clear All
                 </button>
                 <div className="flex-1"></div>
                 
@@ -1023,14 +1406,11 @@ const StudentAttendance = ({ students, onUpdateStudent }) => {
                     <option value="unmarked">Unmarked</option>
                   </select>
                 </div>
-                
-                <span className="text-sm text-gray-500 ml-2">
-                  {filteredStudents.length} students
-                </span>
+                <span className="text-sm text-gray-500 ml-2">{filteredStudents.length} students</span>
               </div>
             )}
 
-            {/* Attendance Table */}
+            {/* Table */}
             <div className="border rounded-lg overflow-hidden">
               <div className="overflow-x-auto">
                 {isLoading ? (
@@ -1071,12 +1451,13 @@ const StudentAttendance = ({ students, onUpdateStudent }) => {
                       {filteredStudents.map((student, index) => {
                         const status = attendanceData[student.studentId] || null;
                         const statusInfo = getStatusInfo(status);
+                        const rollNo = getRollNumber(student);
                         
                         return (
                           <tr key={student.studentId} className="hover:bg-gray-50 transition group">
                             <td className="px-4 py-3 text-sm text-gray-500">{index + 1}</td>
                             <td className="px-4 py-3 text-sm font-medium text-gray-700">
-                              {getStudentRollNo(student)}
+                              {rollNo}
                             </td>
                             <td className="px-4 py-3 text-sm font-medium text-gray-900">
                               {getStudentName(student)}
@@ -1084,13 +1465,11 @@ const StudentAttendance = ({ students, onUpdateStudent }) => {
                             <td className="px-4 py-3 text-center">
                               {status ? (
                                 <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border ${statusInfo.color}`}>
-                                  {statusInfo.icon}
-                                  {statusInfo.label}
+                                  {statusInfo.icon} {statusInfo.label}
                                 </span>
                               ) : (
                                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border bg-gray-100 text-gray-500 border-gray-300">
-                                  <AlertCircle size={14} className="text-gray-400" />
-                                  Unmarked
+                                  <AlertCircle size={14} className="text-gray-400" /> Unmarked
                                 </span>
                               )}
                             </td>
@@ -1104,8 +1483,7 @@ const StudentAttendance = ({ students, onUpdateStudent }) => {
                                       : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
                                   }`}
                                 >
-                                  <CheckCircle size={14} className="inline mr-1" />
-                                  Present
+                                  <CheckCircle size={14} className="inline mr-1" /> Present
                                 </button>
                                 <button
                                   onClick={() => setStudentStatus(student.studentId, 'absent')}
@@ -1115,8 +1493,7 @@ const StudentAttendance = ({ students, onUpdateStudent }) => {
                                       : 'bg-rose-100 text-rose-700 hover:bg-rose-200'
                                   }`}
                                 >
-                                  <XCircle size={14} className="inline mr-1" />
-                                  Absent
+                                  <XCircle size={14} className="inline mr-1" /> Absent
                                 </button>
                                 {status && (
                                   <button
@@ -1144,7 +1521,7 @@ const StudentAttendance = ({ students, onUpdateStudent }) => {
                 <div className="text-xs text-gray-400">
                   {selectedDateStr && (
                     <span>
-                      📅 {new Date(selectedDateStr + 'T00:00:00').toLocaleDateString('en-US', { 
+                       {new Date(selectedDateStr + 'T00:00:00').toLocaleDateString('en-US', { 
                         weekday: 'long', 
                         year: 'numeric', 
                         month: 'long', 
@@ -1154,6 +1531,9 @@ const StudentAttendance = ({ students, onUpdateStudent }) => {
                         <span className="ml-3 text-gray-500">
                           • {attendanceStats.present} present • {attendanceStats.absent} absent • {attendanceStats.unmarked} unmarked
                         </span>
+                      )}
+                      {isHoliday && (
+                        <span className="ml-3 text-amber-600">• Holiday: {holidayReason || 'No classes today'}</span>
                       )}
                     </span>
                   )}
@@ -1165,13 +1545,11 @@ const StudentAttendance = ({ students, onUpdateStudent }) => {
                 >
                   {isSaving ? (
                     <>
-                      <Loader size={18} className="animate-spin" />
-                      Saving...
+                      <Loader size={18} className="animate-spin" /> Saving...
                     </>
                   ) : (
                     <>
-                      <Save size={18} />
-                      Save Attendance
+                      <Save size={18} /> Save Attendance
                     </>
                   )}
                 </button>
