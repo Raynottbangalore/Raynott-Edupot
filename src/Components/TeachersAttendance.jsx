@@ -28,7 +28,8 @@ import {
   Phone,
   Book,
   GraduationCap,
-  Filter
+  Filter,
+  X
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import TeacherApi from '../service/TeacherApi';
@@ -259,40 +260,41 @@ const Calendar = ({ selectedDate, onDateSelect, onClose }) => {
   );
 };
 
-// ────────────────────────────────────────────────
-// Main Teachers Attendance Component
-// ────────────────────────────────────────────────
 
 const TeachersAttendance = ({ onUpdateTeacher }) => {
-  const [teachers, setTeachers] = useState([]);
+  const [allTeachers, setAllTeachers] = useState([]);
   const [filteredTeachers, setFilteredTeachers] = useState([]);
+  const [selectedTeacher, setSelectedTeacher] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [showTeacherList, setShowTeacherList] = useState(false);
   const [selectedDateStr, setSelectedDateStr] = useState('');
   const [showCalendar, setShowCalendar] = useState(false);
   const [attendanceData, setAttendanceData] = useState({});
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterSubject, setFilterSubject] = useState('all');
-  const [filterStatus, setFilterStatus] = useState('all');
-  const [subjects, setSubjects] = useState([]);
   const [attendanceStats, setAttendanceStats] = useState({
     present: 0,
     absent: 0,
+    unmarked: 0,
     total: 0,
     percentage: 0
   });
   const [hasLoaded, setHasLoaded] = useState(false);
+  const [isHoliday, setIsHoliday] = useState(false);
+  const [holidayReason, setHolidayReason] = useState('');
   
   // Monthly export states
   const [showMonthlyExport, setShowMonthlyExport] = useState(false);
   const [exportMonth, setExportMonth] = useState('');
   const [exportYear, setExportYear] = useState('');
   const [isExportingMonthly, setIsExportingMonthly] = useState(false);
+  const [monthlyExportProgress, setMonthlyExportProgress] = useState(0);
   
   const loadTimeoutRef = useRef(null);
   const calendarRef = useRef(null);
   const monthlyExportRef = useRef(null);
+  const searchRef = useRef(null);
   
   const todayStr = new Date().toISOString().split('T')[0];
 
@@ -337,19 +339,16 @@ const TeachersAttendance = ({ onUpdateTeacher }) => {
     try {
       const result = await TeacherApi.getAllTeachers();
       if (result.success) {
-        setTeachers(result.teachers || []);
-        setFilteredTeachers(result.teachers || []);
-        
-        // Extract unique subjects
-        const uniqueSubjects = [...new Set((result.teachers || []).map(t => t.subject).filter(Boolean))];
-        setSubjects(uniqueSubjects);
-        
+        setAllTeachers(result.teachers || []);
         // Initialize attendance data with null (unmarked)
         const initialAttendance = {};
         (result.teachers || []).forEach(teacher => {
           initialAttendance[teacher.teacherId || teacher.id] = null;
         });
         setAttendanceData(initialAttendance);
+        
+        // Update stats with all teachers
+        updateStats(initialAttendance);
       } else {
         toast.error(result.error || 'Failed to load teachers');
       }
@@ -363,49 +362,68 @@ const TeachersAttendance = ({ onUpdateTeacher }) => {
 
   // ─── Load Attendance ────────────────────────
   const loadAttendance = useCallback(async () => {
-    if (!selectedDateStr) return;
+    if (!selectedDateStr || !selectedTeacher) return;
 
     setIsLoading(true);
     try {
-      // Get attendance for the selected date from the API
-      // Note: You'll need to implement this endpoint in the backend
-      // For now, we'll simulate loading from localStorage or default to null
+      const teacherId = selectedTeacher.teacherId || selectedTeacher.id;
+      const result = await TeacherApi.getTeacherAttendance(selectedDateStr, teacherId);
       
-      // Try to load from localStorage
-      const storageKey = `teacher_attendance_${selectedDateStr}`;
-      const storedData = localStorage.getItem(storageKey);
-      
-      if (storedData) {
-        const parsedData = JSON.parse(storedData);
-        setAttendanceData(parsedData);
-        setHasLoaded(true);
+      if (result.success) {
+        // Check if it's a holiday
+        if (result.records && result.records.length > 0 && result.records[0].isHoliday) {
+          setIsHoliday(true);
+          setHolidayReason(result.records[0].reason || 'Holiday');
+          setAttendanceData({ [teacherId]: null });
+          setHasLoaded(true);
+          toast.info(` Holiday: ${result.records[0].reason || 'Holiday'}`);
+          return;
+        }
+
+        setIsHoliday(false);
         
-        // Update stats
-        const present = Object.values(parsedData).filter(v => v === 'present').length;
-        const absent = Object.values(parsedData).filter(v => v === 'absent').length;
-        const total = Object.keys(parsedData).length;
-        const percentage = total > 0 ? Math.round((present / total) * 100) : 0;
-        setAttendanceStats({ present, absent, total, percentage });
-        toast.success(`Attendance loaded: ${present} present, ${absent} absent`);
-        return;
+        const attendanceMap = {};
+        // Initialize all teachers with null
+        allTeachers.forEach(teacher => {
+          attendanceMap[teacher.teacherId || teacher.id] = null;
+        });
+        
+        // Set attendance for the selected teacher
+        if (result.records && result.records.length > 0) {
+          const record = result.records.find(r => r.teacherId === teacherId);
+          if (record && record.status) {
+            attendanceMap[teacherId] = record.status;
+          }
+        }
+        
+        setAttendanceData(attendanceMap);
+        setHasLoaded(true);
+        updateStats(attendanceMap);
+        
+        const status = attendanceMap[teacherId] || 'unmarked';
+        toast.success(`Attendance loaded for ${getTeacherName(selectedTeacher)}: ${status}`);
+      } else {
+        toast.error(result.error || 'Failed to load attendance');
       }
-      
-      // If no stored data, initialize with null
-      const initialAttendance = {};
-      teachers.forEach(teacher => {
-        initialAttendance[teacher.teacherId || teacher.id] = null;
-      });
-      setAttendanceData(initialAttendance);
-      setHasLoaded(true);
-      toast.info('No attendance records found for this date');
-      
     } catch (error) {
       console.error('Load attendance error:', error);
       toast.error('Failed to load attendance');
     } finally {
       setIsLoading(false);
     }
-  }, [selectedDateStr, teachers]);
+  }, [selectedDateStr, selectedTeacher, allTeachers]);
+
+  // ─── Update Stats ──────────────────────────
+  const updateStats = useCallback((data) => {
+    const present = Object.values(data).filter(v => v === 'present').length;
+    const absent = Object.values(data).filter(v => v === 'absent').length;
+    const unmarked = Object.values(data).filter(v => !v || v === 'unmarked' || v === null).length;
+    const total = Object.keys(data).length;
+    const marked = present + absent;
+    const percentage = marked > 0 ? Math.round((present / marked) * 100) : 0;
+    
+    setAttendanceStats({ present, absent, unmarked, total, percentage });
+  }, []);
 
   // ─── Save Attendance ────────────────────────
   const saveAttendance = async () => {
@@ -414,35 +432,49 @@ const TeachersAttendance = ({ onUpdateTeacher }) => {
       return;
     }
 
-    if (teachers.length === 0) {
-      toast.warning('No teachers to mark attendance');
+    if (!selectedTeacher) {
+      toast.warning('Please select a teacher');
       return;
     }
 
-    // Check if any teacher is marked
-    const markedCount = Object.values(attendanceData).filter(v => v === 'present' || v === 'absent').length;
-    if (markedCount === 0) {
-      toast.warning('Please mark attendance for at least one teacher');
+    const teacherId = selectedTeacher.teacherId || selectedTeacher.id;
+    const status = attendanceData[teacherId];
+
+    if (!status && !isHoliday) {
+      toast.warning('Please mark attendance for the teacher');
       return;
     }
 
     setIsSaving(true);
     try {
-      // Save to localStorage for now (you can replace with API call)
-      const storageKey = `teacher_attendance_${selectedDateStr}`;
-      localStorage.setItem(storageKey, JSON.stringify(attendanceData));
+      let payload = {
+        date: selectedDateStr,
+        records: []
+      };
+
+      if (isHoliday) {
+        payload.holiday = {
+          reason: holidayReason || 'Holiday'
+        };
+      } else {
+        payload.records = [{
+          teacherId: teacherId,
+          status: status
+        }];
+      }
+
+      console.log('📤 Saving payload:', payload);
+
+      const result = await TeacherApi.saveTeacherAttendance(payload);
       
-      toast.success(`Attendance saved for ${markedCount} teachers!`);
-      
-      // Update stats
-      const present = Object.values(attendanceData).filter(v => v === 'present').length;
-      const absent = Object.values(attendanceData).filter(v => v === 'absent').length;
-      const total = Object.keys(attendanceData).length;
-      const percentage = total > 0 ? Math.round((present / total) * 100) : 0;
-      setAttendanceStats({ present, absent, total, percentage });
-      
-      if (onUpdateTeacher) {
-        onUpdateTeacher();
+      if (result.success) {
+        toast.success(isHoliday ? 'Holiday marked successfully!' : `Attendance saved for ${getTeacherName(selectedTeacher)}!`);
+        await loadAttendance();
+        if (onUpdateTeacher) {
+          onUpdateTeacher();
+        }
+      } else {
+        toast.error(result.error || 'Failed to save attendance');
       }
     } catch (error) {
       console.error('Save attendance error:', error);
@@ -454,49 +486,51 @@ const TeachersAttendance = ({ onUpdateTeacher }) => {
 
   // ─── Export Functions ──────────────────────
 
-  // Daily Export
   const exportDailyAttendance = async () => {
     if (!selectedDateStr) {
       toast.warning('Please select a date');
       return;
     }
 
-    if (teachers.length === 0) {
+    if (allTeachers.length === 0) {
       toast.warning('No teachers to export');
       return;
     }
 
     setIsExporting(true);
     try {
-      const formattedDate = new Date(selectedDateStr + 'T00:00:00').toLocaleDateString('en-US', {
-        year: 'numeric',
+      const dateObj = new Date(selectedDateStr + 'T00:00:00');
+      const formattedDate = dateObj.toLocaleDateString('en-GB', {
+        day: '2-digit',
         month: '2-digit',
-        day: '2-digit'
+        year: 'numeric'
       });
       
-      const headers = ['S.No', 'Teacher Name', 'Subject', 'Classes', 'Date', 'Status'];
+      const headers = ['S.No', 'Teacher Name', 'Subject', 'Status'];
       
-      const rows = teachers.map((teacher, index) => {
-        const status = attendanceData[teacher.teacherId || teacher.id] || 'unmarked';
+      const rows = allTeachers.map((teacher, index) => {
+        const teacherId = teacher.teacherId || teacher.id;
+        const status = attendanceData[teacherId] || 'unmarked';
         const statusDisplay = status === 'present' ? 'Present' : status === 'absent' ? 'Absent' : 'Unmarked';
         return [
           index + 1,
           getTeacherName(teacher),
           getTeacherSubject(teacher),
-          getTeacherClasses(teacher).join(', '),
-          formattedDate,
           statusDisplay
         ];
       });
 
+      // Add summary
       rows.push([]);
-      rows.push(['Summary', '', '', '', '', '']);
-      rows.push(['Total Teachers', teachers.length, '', '', '', '']);
-      rows.push(['Present', attendanceStats.present, '', '', '', '']);
-      rows.push(['Absent', attendanceStats.absent, '', '', '', '']);
-      if (attendanceStats.total > 0) {
-        rows.push(['Attendance %', attendanceStats.percentage + '%', '', '', '', '']);
+      rows.push(['Summary', '', '', '']);
+      rows.push(['Total Teachers', allTeachers.length, '', '']);
+      rows.push(['Present', attendanceStats.present, '', '']);
+      rows.push(['Absent', attendanceStats.absent, '', '']);
+      rows.push(['Unmarked', attendanceStats.unmarked, '', '']);
+      if (attendanceStats.present + attendanceStats.absent > 0) {
+        rows.push(['Attendance %', attendanceStats.percentage + '%', '', '']);
       }
+      rows.push(['Date', formattedDate, '', '']);
 
       const csvContent = [
         headers.join(','),
@@ -506,7 +540,7 @@ const TeachersAttendance = ({ onUpdateTeacher }) => {
       const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
       const link = document.createElement('a');
       const url = URL.createObjectURL(blob);
-      const fileName = `teacher_attendance_${selectedDateStr}.csv`;
+      const fileName = `teacher_attendance_daily_${selectedDateStr}.csv`;
       link.setAttribute('href', url);
       link.setAttribute('download', fileName);
       document.body.appendChild(link);
@@ -514,7 +548,7 @@ const TeachersAttendance = ({ onUpdateTeacher }) => {
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
       
-      toast.success('Daily attendance exported successfully!');
+      toast.success(`Daily attendance for ${allTeachers.length} teachers exported successfully!`);
     } catch (error) {
       console.error('Export error:', error);
       toast.error('Failed to export attendance');
@@ -523,30 +557,41 @@ const TeachersAttendance = ({ onUpdateTeacher }) => {
     }
   };
 
-  // Monthly Export
   const exportMonthlyAttendance = async () => {
     if (!exportMonth || !exportYear) {
       toast.warning('Please select month and year');
       return;
     }
 
+    if (allTeachers.length === 0) {
+      toast.warning('No teachers found to export');
+      return;
+    }
+
     setIsExportingMonthly(true);
+    setMonthlyExportProgress(0);
+    
     try {
-      const month = `${exportYear}-${exportMonth}`;
       const daysInMonth = new Date(parseInt(exportYear), parseInt(exportMonth), 0).getDate();
       
-      // Build headers
+      // Build headers: S.No, Teacher Name, Subject, then each day
       const headers = ['S.No', 'Teacher Name', 'Subject'];
       const dateHeaders = [];
       for (let day = 1; day <= daysInMonth; day++) {
-        const dateStr = `${exportYear}-${exportMonth}-${String(day).padStart(2, '0')}`;
+        const dateStr = `${String(day).padStart(2, '0')}-${exportMonth}-${exportYear}`;
         dateHeaders.push(dateStr);
       }
-      const fullHeaders = [...headers, ...dateHeaders, 'Present Days', 'Absent Days', 'Attendance %'];
+      const fullHeaders = [...headers, ...dateHeaders];
 
+      // Process each teacher
       const rows = [];
-      for (let teacherIndex = 0; teacherIndex < teachers.length; teacherIndex++) {
-        const teacher = teachers[teacherIndex];
+      let totalPresent = 0;
+      let totalAbsent = 0;
+      
+      for (let teacherIndex = 0; teacherIndex < allTeachers.length; teacherIndex++) {
+        const teacher = allTeachers[teacherIndex];
+        const teacherId = teacher.teacherId || teacher.id;
+        
         const row = [
           teacherIndex + 1,
           getTeacherName(teacher),
@@ -555,50 +600,74 @@ const TeachersAttendance = ({ onUpdateTeacher }) => {
 
         let presentCount = 0;
         let absentCount = 0;
-        let totalDays = 0;
 
+        // Get attendance for each day of the month
         for (let day = 1; day <= daysInMonth; day++) {
           const dateStr = `${exportYear}-${exportMonth}-${String(day).padStart(2, '0')}`;
-          const storageKey = `teacher_attendance_${dateStr}`;
-          const storedData = localStorage.getItem(storageKey);
           
-          let status = '-';
-          if (storedData) {
-            const parsedData = JSON.parse(storedData);
-            const teacherStatus = parsedData[teacher.teacherId || teacher.id];
-            if (teacherStatus === 'present') {
-              status = 'P';
-              presentCount++;
-              totalDays++;
-            } else if (teacherStatus === 'absent') {
-              status = 'A';
-              absentCount++;
-              totalDays++;
+          try {
+            const result = await TeacherApi.getTeacherAttendance(dateStr);
+            let status = '-';
+            
+            if (result.success && result.records) {
+              const holidayRecord = result.records.find(r => r.isHoliday === true);
+              if (holidayRecord) {
+                status = 'H';
+              } else {
+                const record = result.records.find(r => r.teacherId === teacherId);
+                if (record) {
+                  const teacherStatus = (record.status || '').toLowerCase();
+                  if (teacherStatus === 'present') {
+                    status = 'P';
+                    presentCount++;
+                  } else if (teacherStatus === 'absent') {
+                    status = 'A';
+                    absentCount++;
+                  }
+                }
+              }
             }
+            row.push(status);
+          } catch (error) {
+            console.error(`Error fetching attendance for ${dateStr}:`, error);
+            row.push('E');
           }
-          row.push(status);
+          
+          // Update progress
+          const progress = ((teacherIndex * daysInMonth + day) / (allTeachers.length * daysInMonth)) * 100;
+          setMonthlyExportProgress(Math.round(progress));
         }
 
-        const totalMarked = presentCount + absentCount;
-        const percentage = totalMarked > 0 ? Math.round((presentCount / totalMarked) * 100) : 0;
-        row.push(presentCount, absentCount, percentage + '%');
+        totalPresent += presentCount;
+        totalAbsent += absentCount;
         rows.push(row);
       }
 
+      // Add summary rows
       rows.push([]);
-      const summaryRow = ['', '', 'SUMMARY'];
-      const emptyDays = Array(daysInMonth).fill('');
-      rows.push([...summaryRow, ...emptyDays, '', '', '']);
+      rows.push(['SUMMARY', '', '']);
+      rows.push(['Total Teachers', allTeachers.length, '']);
+      rows.push(['Total Present Days', totalPresent, '']);
+      rows.push(['Total Absent Days', totalAbsent, '']);
+      
+      const totalDays = allTeachers.length * daysInMonth;
+      const overallAttendance = totalDays > 0 ? Math.round((totalPresent / totalDays) * 100) : 0;
+      rows.push(['Overall Attendance %', overallAttendance + '%', '']);
+      rows.push(['Month', `${exportMonth}-${exportYear}`, '']);
 
+      // Build CSV
       const csvContent = [
         fullHeaders.join(','),
         ...rows.map(row => row.join(','))
       ].join('\n');
 
-      const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+      const blob = new Blob(['\uFEFF' + csvContent], { 
+        type: 'text/csv;charset=utf-8;' 
+      });
+      
       const link = document.createElement('a');
       const url = URL.createObjectURL(blob);
-      const fileName = `teacher_attendance_${exportYear}-${exportMonth}.csv`;
+      const fileName = `teacher_attendance_monthly_${exportYear}-${exportMonth}.csv`;
       link.setAttribute('href', url);
       link.setAttribute('download', fileName);
       document.body.appendChild(link);
@@ -606,55 +675,100 @@ const TeachersAttendance = ({ onUpdateTeacher }) => {
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
       
-      toast.success(`Monthly attendance exported successfully!`);
+      toast.success(`Monthly attendance for ${allTeachers.length} teachers exported successfully!`);
     } catch (error) {
       console.error('Monthly export error:', error);
-      toast.error('Failed to export monthly attendance');
+      toast.error('Failed to export monthly attendance: ' + (error.message || 'Unknown error'));
     } finally {
       setIsExportingMonthly(false);
       setShowMonthlyExport(false);
+      setMonthlyExportProgress(0);
     }
   };
 
   // ─── UI Actions ─────────────────────────────
-  const setTeacherStatus = (teacherId, status) => {
+  const setTeacherStatus = (status) => {
+    if (!selectedTeacher) return;
+    const teacherId = selectedTeacher.teacherId || selectedTeacher.id;
     setAttendanceData(prev => ({
       ...prev,
       [teacherId]: status
     }));
   };
 
-  const markAllPresent = () => {
-    const updated = {};
-    teachers.forEach(teacher => {
-      updated[teacher.teacherId || teacher.id] = 'present';
-    });
-    setAttendanceData(updated);
-    toast.success('All teachers marked as Present');
-  };
-
-  const markAllAbsent = () => {
-    const updated = {};
-    teachers.forEach(teacher => {
-      updated[teacher.teacherId || teacher.id] = 'absent';
-    });
-    setAttendanceData(updated);
-    toast.success('All teachers marked as Absent');
-  };
-
-  const clearAllMarks = () => {
-    const updated = {};
-    teachers.forEach(teacher => {
-      updated[teacher.teacherId || teacher.id] = null;
-    });
-    setAttendanceData(updated);
-    toast.info('All marks cleared');
+  const clearStatus = () => {
+    if (!selectedTeacher) return;
+    const teacherId = selectedTeacher.teacherId || selectedTeacher.id;
+    setAttendanceData(prev => ({
+      ...prev,
+      [teacherId]: null
+    }));
   };
 
   const handleDateSelect = (dateStr) => {
     setSelectedDateStr(dateStr);
     setHasLoaded(false);
     setShowCalendar(false);
+  };
+
+  const handleSearchChange = (e) => {
+    const value = e.target.value;
+    setSearchTerm(value);
+    setShowTeacherList(value.length > 0);
+    
+    if (value.length > 0) {
+      const filtered = allTeachers.filter(teacher => {
+        const name = getTeacherName(teacher).toLowerCase();
+        const subject = getTeacherSubject(teacher).toLowerCase();
+        const search = value.toLowerCase();
+        return name.includes(search) || subject.includes(search);
+      });
+      setFilteredTeachers(filtered);
+    } else {
+      setFilteredTeachers([]);
+    }
+  };
+
+  const selectTeacher = (teacher) => {
+    setSelectedTeacher(teacher);
+    setSearchTerm(getTeacherName(teacher));
+    setShowTeacherList(false);
+    setHasLoaded(false);
+    
+    const teacherId = teacher.teacherId || teacher.id;
+    setAttendanceData(prev => ({
+      ...prev,
+      [teacherId]: null
+    }));
+    
+    if (selectedDateStr) {
+      setTimeout(() => {
+        loadAttendance();
+      }, 300);
+    }
+  };
+
+  const clearSelectedTeacher = () => {
+    setSelectedTeacher(null);
+    setSearchTerm('');
+    setShowTeacherList(false);
+    setHasLoaded(false);
+  };
+
+  const toggleHoliday = () => {
+    if (!selectedDateStr) {
+      toast.warning('Please select a date first');
+      return;
+    }
+    
+    if (isHoliday) {
+      setIsHoliday(false);
+      setHolidayReason('');
+      toast.info('Holiday mode deactivated');
+    } else {
+      setIsHoliday(true);
+      toast.info('Holiday mode activated. Enter reason and save.');
+    }
   };
 
   // ─── Effects ──────────────────────────────────
@@ -672,7 +786,7 @@ const TeachersAttendance = ({ onUpdateTeacher }) => {
   }, []);
 
   useEffect(() => {
-    if (selectedDateStr && teachers.length > 0 && !hasLoaded) {
+    if (selectedDateStr && selectedTeacher && !hasLoaded) {
       if (loadTimeoutRef.current) {
         clearTimeout(loadTimeoutRef.current);
       }
@@ -686,10 +800,13 @@ const TeachersAttendance = ({ onUpdateTeacher }) => {
         clearTimeout(loadTimeoutRef.current);
       }
     };
-  }, [selectedDateStr, teachers.length, hasLoaded]);
+  }, [selectedDateStr, selectedTeacher, hasLoaded]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
+      if (searchRef.current && !searchRef.current.contains(event.target)) {
+        setShowTeacherList(false);
+      }
       if (calendarRef.current && !calendarRef.current.contains(event.target)) {
         setShowCalendar(false);
       }
@@ -698,51 +815,13 @@ const TeachersAttendance = ({ onUpdateTeacher }) => {
       }
     };
     
-    if (showCalendar || showMonthlyExport) {
+    if (showTeacherList || showCalendar || showMonthlyExport) {
       document.addEventListener('mousedown', handleClickOutside);
       return () => {
         document.removeEventListener('mousedown', handleClickOutside);
       };
     }
-  }, [showCalendar, showMonthlyExport]);
-
-  // ─── Filter Teachers ──────────────────────
-  useEffect(() => {
-    let filtered = teachers;
-    
-    if (searchTerm.trim()) {
-      const term = searchTerm.toLowerCase().trim();
-      filtered = filtered.filter(teacher => {
-        const name = getTeacherName(teacher).toLowerCase();
-        const subject = getTeacherSubject(teacher).toLowerCase();
-        return name.includes(term) || subject.includes(term);
-      });
-    }
-    
-    if (filterSubject !== 'all') {
-      filtered = filtered.filter(teacher => 
-        getTeacherSubject(teacher) === filterSubject
-      );
-    }
-    
-    if (filterStatus !== 'all') {
-      filtered = filtered.filter(teacher => {
-        const status = attendanceData[teacher.teacherId || teacher.id];
-        return status === filterStatus;
-      });
-    }
-    
-    setFilteredTeachers(filtered);
-  }, [teachers, searchTerm, filterSubject, filterStatus, attendanceData]);
-
-  // ─── Update Stats ──────────────────────────
-  useEffect(() => {
-    const present = Object.values(attendanceData).filter(v => v === 'present').length;
-    const absent = Object.values(attendanceData).filter(v => v === 'absent').length;
-    const total = Object.keys(attendanceData).length;
-    const percentage = total > 0 ? Math.round((present / total) * 100) : 0;
-    setAttendanceStats({ present, absent, total, percentage });
-  }, [attendanceData]);
+  }, [showTeacherList, showCalendar, showMonthlyExport]);
 
   // ────────────────────────────────────────────────
   // RENDER
@@ -759,15 +838,19 @@ const TeachersAttendance = ({ onUpdateTeacher }) => {
             </div>
             <div>
               <h2 className="text-xl font-bold text-white">Teachers Attendance</h2>
-              <p className="text-purple-100 text-sm">Mark and manage daily teacher attendance</p>
+              <p className="text-purple-100 text-sm">Search, select, and mark teacher attendance</p>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={() => {
-                loadAttendance();
+                if (selectedTeacher && selectedDateStr) {
+                  loadAttendance();
+                } else {
+                  toast.warning('Please select a teacher and date');
+                }
               }}
-              disabled={isLoading}
+              disabled={isLoading || !selectedTeacher}
               className="px-3 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg flex items-center gap-2 transition disabled:opacity-50 text-sm"
             >
               <RefreshCw size={16} className={isLoading ? 'animate-spin' : ''} />
@@ -786,8 +869,75 @@ const TeachersAttendance = ({ onUpdateTeacher }) => {
 
       {/* Main Content */}
       <div className="p-6">
-        {/* Filters Row */}
-        <div className="grid grid-cols-1 md:grid-cols-6 gap-4 mb-6">
+        {/* Search and Selection Row */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          {/* Search Teacher */}
+          <div className="relative" ref={searchRef}>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              <Search size={15} className="inline mr-1" />
+              Search Teacher
+            </label>
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Search by name or subject..."
+                value={searchTerm}
+                onChange={handleSearchChange}
+                onFocus={() => {
+                  if (searchTerm.length > 0) {
+                    setShowTeacherList(true);
+                  }
+                }}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2.5 pl-10 focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white"
+              />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+              {selectedTeacher && (
+                <button
+                  onClick={clearSelectedTeacher}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                  <X size={18} />
+                </button>
+              )}
+            </div>
+
+            {/* Teacher List Dropdown */}
+            {showTeacherList && filteredTeachers.length > 0 && (
+              <div className="absolute top-full left-0 mt-2 z-50 w-full bg-white rounded-xl shadow-2xl border border-gray-200 max-h-60 overflow-y-auto">
+                {filteredTeachers.map((teacher) => {
+                  const teacherId = teacher.teacherId || teacher.id;
+                  const isSelected = selectedTeacher && (selectedTeacher.teacherId || selectedTeacher.id) === teacherId;
+                  return (
+                    <button
+                      key={teacherId}
+                      onClick={() => selectTeacher(teacher)}
+                      className={`w-full text-left px-4 py-3 hover:bg-purple-50 transition flex items-center justify-between ${
+                        isSelected ? 'bg-purple-50 border-l-4 border-purple-600' : ''
+                      }`}
+                    >
+                      <div>
+                        <p className="font-medium text-gray-900">{getTeacherName(teacher)}</p>
+                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                          <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full">
+                            {getTeacherSubject(teacher)}
+                          </span>
+                        </div>
+                      </div>
+                      {isSelected && <CheckCircle size={16} className="text-purple-600" />}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {showTeacherList && searchTerm.length > 0 && filteredTeachers.length === 0 && (
+              <div className="absolute top-full left-0 mt-2 z-50 w-full bg-white rounded-xl shadow-2xl border border-gray-200 p-4 text-center">
+                <p className="text-gray-500">No teachers found matching "{searchTerm}"</p>
+              </div>
+            )}
+          </div>
+
+          {/* Date */}
           <div className="relative" ref={calendarRef}>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">
               <CalendarIcon size={15} className="inline mr-1" />
@@ -822,142 +972,173 @@ const TeachersAttendance = ({ onUpdateTeacher }) => {
             )}
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              <Search size={15} className="inline mr-1" />
-              Search
-            </label>
-            <input
-              type="text"
-              placeholder="Search by name or subject..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              <Book size={15} className="inline mr-1" />
-              Subject
-            </label>
-            <select
-              value={filterSubject}
-              onChange={(e) => setFilterSubject(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white"
-            >
-              <option value="all">All Subjects</option>
-              {subjects.map(subject => (
-                <option key={subject} value={subject}>{subject}</option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              Status
-            </label>
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white"
-            >
-              <option value="all">All</option>
-              <option value="present">Present</option>
-              <option value="absent">Absent</option>
-              <option value="null">Unmarked</option>
-            </select>
-          </div>
-
+          {/* Holiday Button */}
           <div className="flex items-end">
             <button
+              onClick={toggleHoliday}
+              disabled={!selectedDateStr || !selectedTeacher}
+              className={`w-full px-4 py-2.5 text-sm rounded-lg transition flex items-center justify-center gap-2 ${
+                isHoliday 
+                  ? 'bg-amber-600 hover:bg-amber-700 text-white' 
+                  : 'bg-amber-500 hover:bg-amber-600 text-white'
+              } disabled:opacity-50 disabled:cursor-not-allowed`}
+            >
+              <Gift size={18} />
+              {isHoliday ? 'Cancel Holiday' : 'Mark Holiday'}
+            </button>
+          </div>
+
+          {/* Export Buttons */}
+          <div className="flex items-end gap-2">
+            {/* Daily Export */}
+            <button
               onClick={exportDailyAttendance}
-              disabled={isExporting || isLoading || teachers.length === 0}
-              className="w-full px-4 py-2.5 text-sm bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition flex items-center justify-center gap-2 disabled:opacity-50"
+              disabled={isExporting || allTeachers.length === 0}
+              className="flex-1 px-4 py-2.5 text-sm bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition flex items-center justify-center gap-2 disabled:opacity-50"
             >
               {isExporting ? (
                 <Loader size={18} className="animate-spin" />
               ) : (
                 <FileSpreadsheet size={18} />
               )}
-              Daily Export
-            </button>
-          </div>
-
-          <div className="flex items-end relative" ref={monthlyExportRef}>
-            <button
-              onClick={() => setShowMonthlyExport(!showMonthlyExport)}
-              disabled={isLoading}
-              className="w-full px-4 py-2.5 text-sm bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition flex items-center justify-center gap-2 disabled:opacity-50"
-            >
-              <Download size={18} />
-              Monthly Export
-              <ChevronDown size={16} className={showMonthlyExport ? 'rotate-180' : ''} />
+              Daily
             </button>
 
-            {showMonthlyExport && (
-              <div className="absolute top-full left-0 mt-2 z-50 bg-white rounded-xl shadow-2xl border border-gray-200 p-4 w-64">
-                <h4 className="text-sm font-semibold text-gray-700 mb-3">Select Month</h4>
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Month</label>
-                    <select
-                      value={exportMonth}
-                      onChange={(e) => setExportMonth(e.target.value)}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+            {/* Monthly Export */}
+            <div className="relative" ref={monthlyExportRef}>
+              <button
+                onClick={() => setShowMonthlyExport(!showMonthlyExport)}
+                disabled={isLoading || allTeachers.length === 0}
+                className="px-4 py-2.5 text-sm bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition flex items-center gap-2 disabled:opacity-50"
+              >
+                <Download size={18} />
+                Monthly
+                <ChevronDown size={16} className={showMonthlyExport ? 'rotate-180' : ''} />
+              </button>
+
+              {showMonthlyExport && (
+                <div className="absolute top-full right-0 mt-2 z-50 bg-white rounded-xl shadow-2xl border border-gray-200 p-4 w-72">
+                  <h4 className="text-sm font-semibold text-gray-700 mb-3">Export Monthly Attendance</h4>
+                  <p className="text-xs text-gray-500 mb-3">Exporting all teachers for selected month</p>
+                  
+                  {isExportingMonthly && (
+                    <div className="mb-3">
+                      <div className="w-full bg-gray-200 rounded-full h-2.5">
+                        <div 
+                          className="bg-purple-600 h-2.5 rounded-full transition-all duration-300"
+                          style={{ width: `${monthlyExportProgress}%` }}
+                        ></div>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1 text-center">{monthlyExportProgress}%</p>
+                    </div>
+                  )}
+                  
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Month</label>
+                      <select
+                        value={exportMonth}
+                        onChange={(e) => setExportMonth(e.target.value)}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        disabled={isExportingMonthly}
+                      >
+                        {Array.from({ length: 12 }, (_, i) => {
+                          const month = String(i + 1).padStart(2, '0');
+                          return (
+                            <option key={month} value={month}>
+                              {new Date(2000, i, 1).toLocaleString('default', { month: 'long' })}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Year</label>
+                      <select
+                        value={exportYear}
+                        onChange={(e) => setExportYear(e.target.value)}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        disabled={isExportingMonthly}
+                      >
+                        {Array.from({ length: 5 }, (_, i) => {
+                          const year = new Date().getFullYear() - i;
+                          return (
+                            <option key={year} value={year}>
+                              {year}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+                    <button
+                      onClick={exportMonthlyAttendance}
+                      disabled={isExportingMonthly || allTeachers.length === 0}
+                      className="w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition flex items-center justify-center gap-2 disabled:opacity-50"
                     >
-                      {Array.from({ length: 12 }, (_, i) => {
-                        const month = String(i + 1).padStart(2, '0');
-                        return (
-                          <option key={month} value={month}>
-                            {new Date(2000, i, 1).toLocaleString('default', { month: 'long' })}
-                          </option>
-                        );
-                      })}
-                    </select>
+                      {isExportingMonthly ? (
+                        <>
+                          <Loader size={16} className="animate-spin" />
+                          Exporting...
+                        </>
+                      ) : (
+                        <>
+                          <Download size={16} />
+                          Export ({allTeachers.length} teachers)
+                        </>
+                      )}
+                    </button>
                   </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Year</label>
-                    <select
-                      value={exportYear}
-                      onChange={(e) => setExportYear(e.target.value)}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                    >
-                      {Array.from({ length: 5 }, (_, i) => {
-                        const year = new Date().getFullYear() - i;
-                        return (
-                          <option key={year} value={year}>
-                            {year}
-                          </option>
-                        );
-                      })}
-                    </select>
-                  </div>
-                  <button
-                    onClick={exportMonthlyAttendance}
-                    disabled={isExportingMonthly}
-                    className="w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition flex items-center justify-center gap-2 disabled:opacity-50"
-                  >
-                    {isExportingMonthly ? (
-                      <>
-                        <Loader size={16} className="animate-spin" />
-                        Exporting...
-                      </>
-                    ) : (
-                      <>
-                        <Download size={16} />
-                        Export Monthly
-                      </>
-                    )}
-                  </button>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
 
+        {/* Selected Teacher Info */}
+        {selectedTeacher && (
+          <div className="bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200 rounded-xl p-4 mb-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-purple-600 rounded-full flex items-center justify-center">
+                  <User size={24} className="text-white" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900">{getTeacherName(selectedTeacher)}</h3>
+                  <div className="flex items-center gap-3 text-sm text-gray-600">
+                    <span className="px-2 py-0.5 bg-purple-200 text-purple-800 rounded-full">
+                      {getTeacherSubject(selectedTeacher)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={clearSelectedTeacher}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X size={20} />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Holiday Reason Input */}
+        {isHoliday && (
+          <div className="mb-4 animate-fadeIn">
+            <div className="bg-amber-50 border border-amber-300 rounded-lg p-4 flex items-center gap-3">
+              <Gift size={24} className="text-amber-600 flex-shrink-0" />
+              <input
+                type="text"
+                placeholder="Enter holiday reason..."
+                value={holidayReason}
+                onChange={(e) => setHolidayReason(e.target.value)}
+                className="flex-1 border border-amber-300 bg-white rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+              />
+            </div>
+          </div>
+        )}
+
         {/* Stats */}
-        {teachers.length > 0 && (
+        {selectedTeacher && !isHoliday && (
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
             <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-center">
               <div className="text-2xl font-bold text-emerald-600">{attendanceStats.present}</div>
@@ -972,23 +1153,23 @@ const TeachersAttendance = ({ onUpdateTeacher }) => {
               </div>
             </div>
             <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-center">
-              <div className="text-2xl font-bold text-gray-600">
-                {teachers.length - attendanceStats.present - attendanceStats.absent}
-              </div>
+              <div className="text-2xl font-bold text-gray-600">{attendanceStats.unmarked}</div>
               <div className="text-xs text-gray-700 font-medium flex items-center justify-center gap-1">
                 <AlertCircle size={12} /> Unmarked
               </div>
             </div>
             <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 text-center">
               <div className="text-2xl font-bold text-purple-600">
-                {attendanceStats.total > 0 ? attendanceStats.percentage + '%' : '-'}
+                {attendanceStats.total > 0 && attendanceStats.unmarked < attendanceStats.total
+                  ? attendanceStats.percentage + '%'
+                  : '-'}
               </div>
               <div className="text-xs text-purple-700 font-medium flex items-center justify-center gap-1">
                 <BarChart3 size={12} /> Rate
               </div>
             </div>
             <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-center">
-              <div className="text-2xl font-bold text-gray-600">{teachers.length}</div>
+              <div className="text-2xl font-bold text-gray-600">{attendanceStats.total}</div>
               <div className="text-xs text-gray-700 font-medium flex items-center justify-center gap-1">
                 <Users size={12} /> Total
               </div>
@@ -996,186 +1177,158 @@ const TeachersAttendance = ({ onUpdateTeacher }) => {
           </div>
         )}
 
-        {/* Action Buttons */}
-        {teachers.length > 0 && (
-          <div className="flex flex-wrap items-center gap-2 mb-4">
-            <button
-              onClick={markAllPresent}
-              disabled={isLoading}
-              className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-sm rounded-lg transition flex items-center gap-1.5 disabled:opacity-50"
-            >
-              <CheckCircle size={14} /> All Present
-            </button>
-            <button
-              onClick={markAllAbsent}
-              disabled={isLoading}
-              className="px-3 py-1.5 bg-rose-500 hover:bg-rose-600 text-white text-sm rounded-lg transition flex items-center gap-1.5 disabled:opacity-50"
-            >
-              <XCircle size={14} /> All Absent
-            </button>
-            <button
-              onClick={clearAllMarks}
-              disabled={isLoading}
-              className="px-3 py-1.5 bg-gray-400 hover:bg-gray-500 text-white text-sm rounded-lg transition flex items-center gap-1.5 disabled:opacity-50"
-            >
-              <RefreshCw size={14} /> Clear All
-            </button>
-            <div className="flex-1"></div>
-            <span className="text-sm text-gray-500 ml-2">
-              {filteredTeachers.length} teachers
-            </span>
-          </div>
-        )}
-
-        {/* Table */}
-        <div className="border rounded-lg overflow-hidden">
-          <div className="overflow-x-auto">
-            {isLoading ? (
-              <div className="flex items-center justify-center py-16">
-                <Loader size={32} className="animate-spin text-purple-500" />
-                <span className="ml-3 text-gray-600">Loading teachers...</span>
-              </div>
-            ) : teachers.length === 0 ? (
-              <div className="text-center py-16">
-                <AlertCircle size={48} className="mx-auto mb-3 text-gray-400" />
-                <p className="text-gray-500 font-medium text-lg">No Teachers Found</p>
-                <p className="text-sm text-gray-400">Add teachers to start marking attendance</p>
-              </div>
-            ) : filteredTeachers.length === 0 ? (
-              <div className="text-center py-16">
-                <Search size={48} className="mx-auto mb-3 text-gray-400" />
-                <p className="text-gray-500 font-medium text-lg">No Matching Teachers</p>
-                <p className="text-sm text-gray-400">Try adjusting your search or filters</p>
+        {/* Main Content Area */}
+        {selectedTeacher ? (
+          <>
+            {isHoliday ? (
+              <div className="text-center py-12 bg-amber-50 rounded-xl border-2 border-dashed border-amber-300">
+                <Gift size={48} className="mx-auto mb-3 text-amber-400" />
+                <p className="text-gray-500 font-medium text-lg">Holiday</p>
+                <p className="text-sm text-gray-400">{holidayReason || 'No classes today'}</p>
               </div>
             ) : (
-              <table className="w-full">
-                <thead className="bg-gray-50 border-b sticky top-0">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">#</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Teacher Name</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Subject</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Classes</th>
-                    <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Status</th>
-                    <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {filteredTeachers.map((teacher, index) => {
-                    const teacherId = teacher.teacherId || teacher.id;
-                    const status = attendanceData[teacherId] || null;
-                    const statusInfo = getStatusInfo(status);
-                    
-                    return (
-                      <tr key={teacherId} className="hover:bg-gray-50 transition group">
-                        <td className="px-4 py-3 text-sm text-gray-500">{index + 1}</td>
-                        <td className="px-4 py-3 text-sm font-medium text-gray-900">
-                          <div className="flex items-center gap-2">
-                            <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
-                              <User size={14} className="text-purple-600" />
-                            </div>
-                            {getTeacherName(teacher)}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-600">
-                          <span className="px-2 py-1 bg-purple-50 text-purple-700 rounded-full text-xs">
-                            {getTeacherSubject(teacher)}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-600">
-                          <div className="flex flex-wrap gap-1">
-                            {getTeacherClasses(teacher).map((cls, i) => (
-                              <span key={i} className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs">
-                                {cls}
-                              </span>
-                            ))}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          {status ? (
-                            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border ${statusInfo.color}`}>
-                              {statusInfo.icon} {statusInfo.label}
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border bg-gray-100 text-gray-500 border-gray-300">
-                              <AlertCircle size={14} className="text-gray-400" /> Unmarked
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <div className="flex items-center justify-center gap-2">
-                            <button
-                              onClick={() => setTeacherStatus(teacherId, 'present')}
-                              className={`px-3 py-1.5 text-xs rounded-lg transition font-medium ${
-                                status === 'present'
-                                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-200'
-                                  : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
-                              }`}
-                            >
-                              <CheckCircle size={14} className="inline mr-1" /> Present
-                            </button>
-                            <button
-                              onClick={() => setTeacherStatus(teacherId, 'absent')}
-                              className={`px-3 py-1.5 text-xs rounded-lg transition font-medium ${
-                                status === 'absent'
-                                  ? 'bg-rose-600 text-white shadow-md shadow-rose-200'
-                                  : 'bg-rose-100 text-rose-700 hover:bg-rose-200'
-                              }`}
-                            >
-                              <XCircle size={14} className="inline mr-1" /> Absent
-                            </button>
-                            {status && (
-                              <button
-                                onClick={() => setTeacherStatus(teacherId, null)}
-                                className="px-2 py-1.5 text-xs rounded-lg transition font-medium bg-gray-100 text-gray-500 hover:bg-gray-200"
-                                title="Clear status"
-                              >
-                                <RefreshCw size={12} />
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+              <div className="border rounded-lg overflow-hidden">
+                <div className="overflow-x-auto">
+                  {isLoading ? (
+                    <div className="flex items-center justify-center py-12">
+                      <Loader size={32} className="animate-spin text-purple-500" />
+                      <span className="ml-3 text-gray-600">Loading attendance...</span>
+                    </div>
+                  ) : (
+                    <table className="w-full">
+                      <thead className="bg-gray-50 border-b">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">#</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Teacher Name</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Subject</th>
+                          <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Status</th>
+                          <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {(() => {
+                          const teacherId = selectedTeacher.teacherId || selectedTeacher.id;
+                          const status = attendanceData[teacherId] || null;
+                          const statusInfo = getStatusInfo(status);
+                          
+                          return (
+                            <tr className="hover:bg-gray-50 transition">
+                              <td className="px-4 py-3 text-sm text-gray-500">1</td>
+                              <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
+                                    <User size={14} className="text-purple-600" />
+                                  </div>
+                                  {getTeacherName(selectedTeacher)}
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 text-sm text-gray-600">
+                                <span className="px-2 py-1 bg-purple-50 text-purple-700 rounded-full text-xs">
+                                  {getTeacherSubject(selectedTeacher)}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 text-center">
+                                {status ? (
+                                  <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border ${statusInfo.color}`}>
+                                    {statusInfo.icon} {statusInfo.label}
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border bg-gray-100 text-gray-500 border-gray-300">
+                                    <AlertCircle size={14} className="text-gray-400" /> Unmarked
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-4 py-3 text-center">
+                                <div className="flex items-center justify-center gap-2">
+                                  <button
+                                    onClick={() => setTeacherStatus('present')}
+                                    className={`px-3 py-1.5 text-xs rounded-lg transition font-medium ${
+                                      status === 'present'
+                                        ? 'bg-emerald-600 text-white shadow-md shadow-emerald-200'
+                                        : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                                    }`}
+                                  >
+                                    <CheckCircle size={14} className="inline mr-1" /> Present
+                                  </button>
+                                  <button
+                                    onClick={() => setTeacherStatus('absent')}
+                                    className={`px-3 py-1.5 text-xs rounded-lg transition font-medium ${
+                                      status === 'absent'
+                                        ? 'bg-rose-600 text-white shadow-md shadow-rose-200'
+                                        : 'bg-rose-100 text-rose-700 hover:bg-rose-200'
+                                    }`}
+                                  >
+                                    <XCircle size={14} className="inline mr-1" /> Absent
+                                  </button>
+                                  {status && (
+                                    <button
+                                      onClick={clearStatus}
+                                      className="px-2 py-1.5 text-xs rounded-lg transition font-medium bg-gray-100 text-gray-500 hover:bg-gray-200"
+                                      title="Clear status"
+                                    >
+                                      <RefreshCw size={12} />
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })()}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
             )}
-          </div>
-        </div>
 
-        {/* Footer */}
-        {!isLoading && teachers.length > 0 && (
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-            <div className="text-xs text-gray-400">
-              {selectedDateStr && (
-                <span>
-                   {new Date(selectedDateStr + 'T00:00:00').toLocaleDateString('en-US', { 
-                    weekday: 'long', 
-                    year: 'numeric', 
-                    month: 'long', 
-                    day: 'numeric' 
-                  })}
-                  <span className="ml-3 text-gray-500">
-                    • {attendanceStats.present} present • {attendanceStats.absent} absent
-                  </span>
-                </span>
-              )}
-            </div>
-            <button
-              onClick={saveAttendance}
-              disabled={isSaving || isLoading || teachers.length === 0}
-              className="px-6 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg flex items-center gap-2 transition disabled:opacity-50 text-sm font-medium shadow-md shadow-purple-200"
-            >
-              {isSaving ? (
-                <>
-                  <Loader size={18} className="animate-spin" /> Saving...
-                </>
-              ) : (
-                <>
-                  <Save size={18} /> Save Attendance
-                </>
-              )}
-            </button>
+            {/* Footer */}
+            {!isLoading && selectedTeacher && (
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                <div className="text-xs text-gray-400">
+                  {selectedDateStr && (
+                    <span>
+                       {new Date(selectedDateStr + 'T00:00:00').toLocaleDateString('en-US', { 
+                        weekday: 'long', 
+                        year: 'numeric', 
+                        month: 'long', 
+                        day: 'numeric' 
+                      })}
+                      {!isHoliday && (
+                        <span className="ml-3 text-gray-500">
+                          • {getTeacherName(selectedTeacher)}
+                        </span>
+                      )}
+                      {isHoliday && (
+                        <span className="ml-3 text-amber-600">• Holiday: {holidayReason || 'No classes today'}</span>
+                      )}
+                    </span>
+                  )}
+                </div>
+
+                {/* Save Button */}
+                <button
+                  onClick={saveAttendance}
+                  disabled={isSaving || isLoading || !selectedTeacher}
+                  className="px-6 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg flex items-center gap-2 transition disabled:opacity-50 text-sm font-medium shadow-md shadow-purple-200"
+                >
+                  {isSaving ? (
+                    <>
+                      <Loader size={18} className="animate-spin" /> Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save size={18} /> Save Attendance
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="text-center py-20 bg-gray-50 rounded-xl border-2 border-dashed border-gray-300">
+            <Search size={56} className="mx-auto mb-4 text-gray-400" />
+            <p className="text-gray-500 font-medium text-lg">Search and Select a Teacher</p>
+            <p className="text-sm text-gray-400 mt-1">Type a teacher name or subject to get started</p>
           </div>
         )}
       </div>

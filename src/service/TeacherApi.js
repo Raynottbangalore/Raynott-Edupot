@@ -338,6 +338,211 @@ class TeacherApi {
       return { success: false, error: error.message };
     }
   }
+  // src/service/TeacherApi.js
+
+// Add to existing TeacherApi class
+
+  /**
+   * Get teacher attendance for a specific date
+   * @param {string} date - Date in YYYY-MM-DD format
+   * @param {string} teacherId - Optional teacher ID filter
+   * @returns {Promise<{success: boolean, records: Array, summary: Object}>}
+   */
+  static async getTeacherAttendance(date, teacherId = null) {
+    try {
+      const headers = await this.getAuthHeader();
+      let url = `${BASE_URL}/teacher-attendance?date=${date}`;
+      if (teacherId) {
+        url += `&teacherId=${teacherId}`;
+      }
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        headers,
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to load teacher attendance');
+      }
+
+      return {
+        success: true,
+        records: data.records || [],
+        summary: data.summary || { present: 0, absent: 0, total: 0 }
+      };
+    } catch (error) {
+      console.error('Get teacher attendance error:', error);
+      return { 
+        success: false, 
+        error: error.message,
+        records: [],
+        summary: { present: 0, absent: 0, total: 0 }
+      };
+    }
+  }
+
+  /**
+   * Save teacher attendance
+   * @param {Object} attendanceData - { date, records: [{ teacherId, status }], holiday: { reason } }
+   * @returns {Promise<{success: boolean, count: number, message: string}>}
+   */
+  static async saveTeacherAttendance(attendanceData) {
+    try {
+      const headers = await this.getAuthHeader();
+      const response = await fetch(`${BASE_URL}/teacher-attendance`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(attendanceData),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to save teacher attendance');
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Save teacher attendance error:', error);
+      return { 
+        success: false, 
+        error: error.message,
+        count: 0
+      };
+    }
+  }
+
+  /**
+   * Get monthly teacher attendance statistics
+   * @param {string} month - Month in YYYY-MM format
+   * @returns {Promise<{success: boolean, data: Object}>}
+   */
+  static async getMonthlyTeacherAttendance(month) {
+    try {
+      const headers = await this.getAuthHeader();
+      const response = await fetch(`${BASE_URL}/teacher-attendance/stats/monthly?month=${month}`, {
+        method: 'GET',
+        headers,
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to load monthly teacher attendance');
+      }
+
+      return {
+        success: true,
+        data: data.data
+      };
+    } catch (error) {
+      console.error('Get monthly teacher attendance error:', error);
+      return { 
+        success: false, 
+        error: error.message,
+        data: null
+      };
+    }
+  }
+
+  /**
+   * Get teacher attendance summary
+   * @param {string} teacherId - Teacher ID
+   * @param {string} startDate - Start date in YYYY-MM-DD format
+   * @param {string} endDate - End date in YYYY-MM-DD format
+   * @returns {Promise<{success: boolean, data: Object}>}
+   */
+  static async getTeacherAttendanceSummary(teacherId, startDate, endDate) {
+    try {
+      const headers = await this.getAuthHeader();
+      const response = await fetch(
+        `${BASE_URL}/teacher-attendance/teacher/${teacherId}/summary?startDate=${startDate}&endDate=${endDate}`,
+        {
+          method: 'GET',
+          headers,
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to load teacher attendance summary');
+      }
+
+      return {
+        success: true,
+        data: data.data
+      };
+    } catch (error) {
+      console.error('Get teacher attendance summary error:', error);
+      return { 
+        success: false, 
+        error: error.message,
+        data: null
+      };
+    }
+  }
+
+  /**
+   * Delete teacher attendance
+   * @param {string} teacherId - Teacher ID
+   * @param {string} date - Date in YYYY-MM-DD format
+   * @returns {Promise<{success: boolean, message: string}>}
+   */
+  static async deleteTeacherAttendance(teacherId, date) {
+    try {
+      const headers = await this.getAuthHeader();
+      const response = await fetch(
+        `${BASE_URL}/teacher-attendance/teacher/${teacherId}?date=${date}`,
+        {
+          method: 'DELETE',
+          headers,
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to delete teacher attendance');
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Delete teacher attendance error:', error);
+      return { 
+        success: false, 
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * Export teacher attendance as CSV
+   * @param {string} startDate - Start date in YYYY-MM-DD format
+   * @param {string} endDate - End date in YYYY-MM-DD format
+   * @returns {Promise<Blob>} - CSV file blob
+   */
+  static async exportTeacherAttendanceCSV(startDate, endDate) {
+    try {
+      const headers = await this.getAuthHeader();
+      const response = await fetch(`${BASE_URL}/teacher-attendance/export`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ startDate, endDate }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to export teacher attendance');
+      }
+
+      return await response.blob();
+    } catch (error) {
+      console.error('Export teacher attendance CSV error:', error);
+      throw error;
+    }
+  }
 }
 
 export default TeacherApi;

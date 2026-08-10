@@ -679,7 +679,6 @@ const StudentAttendance = ({
     }
   }, [selectedDateStr, selectedClass, selectedSection, classStudents, hallTicketsLoaded]);
 
-  // ⭐ Manual refresh function
   const handleRefresh = useCallback(async () => {
     if (!isClassSelected) return;
     
@@ -777,7 +776,6 @@ const StudentAttendance = ({
     }
   };
 
-  // ─── Export Functions ──────────────────────
 
   // Daily Export
   const exportDailyAttendance = async () => {
