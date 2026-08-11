@@ -1219,7 +1219,7 @@ const StudentAttendance = ({
               {isExporting ? (
                 <Loader size={18} className="animate-spin" />
               ) : (
-                <FileSpreadsheet size={18} />
+                <Download size={18} />
               )}
               Daily Export
             </button>

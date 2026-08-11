@@ -880,7 +880,7 @@ const TeachersAttendance = ({ onUpdateTeacher }) => {
             <div className="relative">
               <input
                 type="text"
-                placeholder="Search by name or subject..."
+                placeholder="Search by name"
                 value={searchTerm}
                 onChange={handleSearchChange}
                 onFocus={() => {
@@ -890,7 +890,6 @@ const TeachersAttendance = ({ onUpdateTeacher }) => {
                 }}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2.5 pl-10 focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white"
               />
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
               {selectedTeacher && (
                 <button
                   onClick={clearSelectedTeacher}
@@ -999,7 +998,7 @@ const TeachersAttendance = ({ onUpdateTeacher }) => {
               {isExporting ? (
                 <Loader size={18} className="animate-spin" />
               ) : (
-                <FileSpreadsheet size={18} />
+                <Download size={18} />
               )}
               Daily
             </button>
@@ -1138,7 +1137,7 @@ const TeachersAttendance = ({ onUpdateTeacher }) => {
         )}
 
         {/* Stats */}
-        {selectedTeacher && !isHoliday && (
+        {/* {selectedTeacher && !isHoliday && (
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
             <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-center">
               <div className="text-2xl font-bold text-emerald-600">{attendanceStats.present}</div>
@@ -1175,7 +1174,7 @@ const TeachersAttendance = ({ onUpdateTeacher }) => {
               </div>
             </div>
           </div>
-        )}
+        )} */}
 
         {/* Main Content Area */}
         {selectedTeacher ? (

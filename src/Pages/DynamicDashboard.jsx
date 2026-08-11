@@ -1,9 +1,6 @@
 // src/components/dashboard/DynamicDashboard.jsx
 import React, { useState, useEffect } from 'react';
-import { 
-  LogOut, Users, UserPlus, List, BarChart3, Search, DollarSign, Award, 
-  Ticket, School, MapPin, Award as AwardIcon, Building 
-} from 'lucide-react';
+import { LogOut, Users, UserPlus, List, BarChart3, Search, DollarSign, Award, Ticket, School, MapPin, Award as AwardIcon, Building, Calendar } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { auth } from '../service/firebase';
 import SchoolApi from '../service/SchoolApi';
@@ -17,6 +14,8 @@ import AssessmentTab from '../Components/AssessmentTab';
 import TeachersAssessment from '../Components/TeachersAssessment';
 import HallTicket from '../Components/HallTicket';
 import MarksCard from '../Components/MarksCard';
+import StudentAttendance from '../Components/StudentAttendance';
+import TeachersAttendance from '../Components/TeachersAttendance'; 
 
 // Tab Icons & Names Mapping
 const TAB_CONFIG = {
@@ -27,9 +26,11 @@ const TAB_CONFIG = {
   marks: { icon: Award, name: 'Marks' },
   marksCard: { icon: AwardIcon, name: 'Marks Card' },
   assessment: { icon: BarChart3, name: 'Assessment Reports' },
-  assessments: { icon: BarChart3, name: 'Assessment Reports' }, // Backward compatibility
+  assessments: { icon: BarChart3, name: 'Assessment Reports' },
   teachers: { icon: Users, name: 'Teachers Assessment' },
-  hallticket: { icon: Ticket, name: 'Hall Ticket' }
+  hallticket: { icon: Ticket, name: 'Hall Ticket' },
+  studentAttendance: { icon: Calendar, name: 'Student Attendance' }, 
+  teacherAttendance: { icon: Users, name: 'Teachers Attendance' } 
 };
 
 // Tab Components Mapping
@@ -41,9 +42,11 @@ const TAB_COMPONENTS = {
   marks: MarksTab,
   marksCard: MarksCard,
   assessment: AssessmentTab,
-  assessments: AssessmentTab, // Backward compatibility
-  teachers: TeachersAssessment, // Make sure this is TeachersAssessment
-  hallticket: HallTicket
+  assessments: AssessmentTab,
+  teachers: TeachersAssessment,
+  hallticket: HallTicket,
+  studentAttendance: StudentAttendance, 
+  teacherAttendance: TeachersAttendance 
 };
 
 const DynamicDashboard = () => {
@@ -62,11 +65,13 @@ const DynamicDashboard = () => {
     schoolAffiliation: ''
   });
   const [isSchoolInfoLoading, setIsSchoolInfoLoading] = useState(true);
+  const [studentHallTicketData, setStudentHallTicketData] = useState({});
 
   // Helper function to normalize tab IDs
   const normalizeTabId = (tabId) => {
-    // Map 'assessments' to 'assessment'
     if (tabId === 'assessments') return 'assessment';
+    if (tabId === 'studentAttendance') return 'studentAttendance';
+    if (tabId === 'teacherAttendance') return 'teacherAttendance';
     return tabId;
   };
 
@@ -80,7 +85,6 @@ const DynamicDashboard = () => {
           return;
         }
 
-        // Get user profile using SchoolApi
         const profileResult = await SchoolApi.getUserProfile(currentUser.uid);
         
         if (!profileResult.success) {
@@ -95,48 +99,37 @@ const DynamicDashboard = () => {
           ...profileData
         });
         
-        // Get enabled tabs from user profile
         let tabs = profileData.enabledTabs || [];
-        
-        // Normalize tab IDs (convert 'assessments' to 'assessment')
         tabs = tabs.map(normalizeTabId);
-        
-        // Remove duplicates
         tabs = [...new Set(tabs)];
         
-        // If user has fullAccess, get all tabs
         if (profileData.fullAccess) {
           tabs = Object.keys(TAB_CONFIG).map(normalizeTabId);
           tabs = [...new Set(tabs)];
         }
         
-        // If still no tabs, get school default tabs
         if (tabs.length === 0 && profileData.schoolId) {
           const schoolConfig = await SchoolApi.getSchoolTabConfig(profileData.schoolId);
           if (schoolConfig.success && schoolConfig.enabledTabs) {
             tabs = schoolConfig.enabledTabs.map(normalizeTabId);
             tabs = [...new Set(tabs)];
           } else {
-            // Default tabs if nothing is configured
             tabs = ['search', 'allStudents', 'addStudent'];
           }
         }
         
-        // Filter out any invalid tabs
         const validTabs = tabs.filter(tabId => TAB_CONFIG[tabId]);
-        
         setEnabledTabs(validTabs);
+        
         if (validTabs.length > 0 && validTabs.includes(activeTab)) {
-          // Keep current tab if it's enabled
+          // Keep current tab
         } else if (validTabs.length > 0) {
           setActiveTab(validTabs[0]);
         }
         
-        // Fetch school info
         await loadSchoolInfo();
-        
-        // Fetch all students
         await refreshStudents();
+        await loadHallTicketsForStudents();
         
       } catch (error) {
         console.error('Error fetching user data:', error);
@@ -148,6 +141,34 @@ const DynamicDashboard = () => {
     
     fetchUserData();
   }, []);
+
+  const loadHallTicketsForStudents = async () => {
+    try {
+      const hallTicketDataMap = {};
+      const promises = students.map(async (student) => {
+        try {
+          const result = await StudentApi.getHallTicket(student.studentId);
+          if (result.success && result.hallTicket) {
+            const data = result.hallTicket.hallTicketData || {};
+            hallTicketDataMap[student.studentId] = {
+              rollNumber: data.rollNumber || '',
+              studentName: data.studentName || '',
+              studentClass: data.studentClass || '',
+              section: data.section || '',
+              ...data
+            };
+          }
+        } catch (error) {
+          console.log(`No hall ticket found for student ${student.studentId}`);
+        }
+      });
+      await Promise.all(promises);
+      setStudentHallTicketData(hallTicketDataMap);
+      console.log(`✅ Loaded ${Object.keys(hallTicketDataMap).length} hall tickets`);
+    } catch (error) {
+      console.error('Error loading hall tickets:', error);
+    }
+  };
 
   // Load school info
   const loadSchoolInfo = async () => {
@@ -277,20 +298,40 @@ const DynamicDashboard = () => {
   
   const handleUpdateStudent = async () => {
     await refreshStudents();
+    await loadHallTicketsForStudents();
   };
   
   const handleRefresh = async () => {
     setRefreshing(true);
     await refreshStudents();
-    toast.info('Student list refreshed');
+    await loadHallTicketsForStudents();
+    toast.info('Data refreshed');
+  };
+
+  //  ADDED: Function to update hall ticket data from HallTicket component
+  const updateHallTicketData = (studentId, hallTicketData) => {
+    if (studentId && hallTicketData) {
+      setStudentHallTicketData(prev => ({
+        ...prev,
+        [studentId]: {
+          rollNumber: hallTicketData.rollNumber || '',
+          studentName: hallTicketData.studentName || '',
+          studentClass: hallTicketData.studentClass || '',
+          section: hallTicketData.section || '',
+          ...hallTicketData
+        }
+      }));
+    }
+  };
+
+  const getHallTicketData = (studentId) => {
+    return studentHallTicketData[studentId] || null;
   };
 
   // Render the active tab component with appropriate props
   const renderActiveTab = () => {
-    // Normalize the active tab ID
     const normalizedTab = normalizeTabId(activeTab);
     
-    // Log for debugging
     console.log('Active tab:', activeTab, 'Normalized:', normalizedTab);
     
     const Component = TAB_COMPONENTS[normalizedTab];
@@ -301,7 +342,6 @@ const DynamicDashboard = () => {
           <div className="text-6xl mb-4">⚠️</div>
           <h3 className="text-xl font-semibold text-gray-700 mb-2">Component Not Found</h3>
           <p className="text-gray-500">The component for tab "{activeTab}" could not be found.</p>
-          <p className="text-sm text-gray-400 mt-2">Available tabs: {Object.keys(TAB_COMPONENTS).join(', ')}</p>
           <button
             onClick={() => setActiveTab(enabledTabs[0] || 'search')}
             className="mt-4 px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700"
@@ -312,13 +352,12 @@ const DynamicDashboard = () => {
       );
     }
 
-    // Common props for all tabs
     const commonProps = {
       students: students,
       onUpdateStudent: handleUpdateStudent,
     };
 
-    // Special props for specific tabs
+    // ⭐ Special props for specific tabs
     switch (normalizedTab) {
       case 'addStudent':
         return (
@@ -342,6 +381,9 @@ const DynamicDashboard = () => {
           <MarksCard
             {...commonProps}
             schoolInfo={schoolInfo}
+            hallTicketData={studentHallTicketData}
+            getHallTicketData={getHallTicketData}
+            onRefreshHallTickets={loadHallTicketsForStudents}
           />
         );
       case 'hallticket':
@@ -349,6 +391,7 @@ const DynamicDashboard = () => {
           <HallTicket
             {...commonProps}
             schoolInfo={schoolInfo}
+            onHallTicketDataUpdate={updateHallTicketData}
           />
         );
       case 'allStudents':
@@ -372,6 +415,20 @@ const DynamicDashboard = () => {
         return (
           <TeachersAssessment
             {...commonProps}
+          />
+        );
+      case 'studentAttendance':
+        return (
+          <StudentAttendance
+            {...commonProps}
+            hallTicketData={studentHallTicketData}
+            getHallTicketData={getHallTicketData}
+          />
+        );
+      case 'teacherAttendance':
+        return (
+          <TeachersAttendance
+            onUpdateTeacher={handleUpdateStudent}
           />
         );
       default:

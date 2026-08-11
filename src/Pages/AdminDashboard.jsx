@@ -6,14 +6,13 @@ import {
   Lock, Unlock, CheckCircle, AlertCircle,
   BarChart3, X, Copy,
   Users, Eye, Plus, Settings, ChevronDown, ChevronUp,
-  User
+  User, Calendar
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { auth } from '../service/firebase';
 import SchoolApi from '../service/SchoolApi';  
 import { useNavigate } from 'react-router-dom';
 
-// Updated AVAILABLE_TABS with all dashboard tabs
 const AVAILABLE_TABS = [
   { id: 'search', name: 'Search Students', icon: '🔍', description: 'Search and filter students' },
   { id: 'allStudents', name: 'All Students', icon: '📋', description: 'View complete student list' },
@@ -23,7 +22,9 @@ const AVAILABLE_TABS = [
   { id: 'marksCard', name: 'Marks Card', icon: '🏆', description: 'View student marks cards' },
   { id: 'assessment', name: 'Assessment Reports', icon: '📈', description: 'View assessment reports' },
   { id: 'teachers', name: 'Teachers Assessment', icon: '👨‍🏫', description: 'Teachers assessment view' },
-  { id: 'hallticket', name: 'Hall Ticket', icon: '🎫', description: 'Generate hall tickets' }
+  { id: 'hallticket', name: 'Hall Ticket', icon: '🎫', description: 'Generate hall tickets' },
+  { id: 'studentAttendance', name: 'Student Attendance', icon: '📅', description: 'Mark and manage student attendance' },
+  { id: 'teacherAttendance', name: 'Teachers Attendance', icon: '👨‍🏫', description: 'Mark and manage teacher attendance' }
 ];
 
 // Helper function to normalize tab IDs (for backward compatibility)
@@ -877,7 +878,6 @@ const AdminDashboard = ({ user, onLogout }) => {
         </div>
       )}
 
-      {/* User Tab Configuration Modal */}
       {showTabConfig && selectedUserForTabs && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
