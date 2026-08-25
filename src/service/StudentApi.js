@@ -370,11 +370,6 @@ class StudentApi {
 /**
  * Get all students with class exam marks merged
  */
-// src/service/StudentApi.js
-
-/**
- * Get all students with class exam marks merged
- */
 static async getAllStudentsWithClassMarks(forceRefresh = false) {
   try {
     console.log('🔍 Fetching all students with class marks...', forceRefresh ? '(FORCE REFRESH)' : '');
@@ -447,7 +442,7 @@ static async getAllStudentsWithClassMarks(forceRefresh = false) {
           // Create a map of subject name to obtained marks
           const marksMap = {};
           studentMarks.marks.forEach(mark => {
-            // ⭐ FIX: Ensure marks are parsed as numbers
+            //  FIX: Ensure marks are parsed as numbers
             const marksObtained = parseFloat(mark.marks) || 0;
             marksMap[mark.name] = marksObtained;
           });
@@ -455,7 +450,7 @@ static async getAllStudentsWithClassMarks(forceRefresh = false) {
           // Build subjects using the latest subject configuration
           subjects = latestSubjects.map(subject => {
             const marksObtained = marksMap[subject.name] || 0;
-            // ⭐ FIX: Ensure total is parsed as number
+            //  FIX: Ensure total is parsed as number
             const total = parseFloat(subject.total) || 0;
             const percentage = total > 0 ? (marksObtained / total) * 100 : 0;
             
@@ -476,7 +471,7 @@ static async getAllStudentsWithClassMarks(forceRefresh = false) {
           }));
         }
         
-        // ⭐ FIX: Use reduce with proper number parsing
+        //  FIX: Use reduce with proper number parsing
         const totalMarks = subjects.reduce((sum, s) => {
           const marks = parseFloat(s.marks) || 0;
           return sum + marks;
