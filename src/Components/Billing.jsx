@@ -1,19 +1,6 @@
 // src/Components/Billing.jsx
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { 
-  Search, 
-  Eye, 
-  FileText, 
-  Receipt, 
-  X, 
-  Plus, 
-  Trash2, 
-  Loader,
-  User,
-  Printer,
-  Download,
-  Users
-} from 'lucide-react';
+import { Search,Eye,FileText,Receipt,X,Plus,Trash2,Loader,User,Printer,Download,Users} from 'lucide-react';
 import { toast } from 'react-toastify';
 import StudentApi from '../service/StudentApi';
 import html2pdf from 'html2pdf.js';
@@ -563,7 +550,6 @@ const Billing = () => {
             </div>
             <div style="text-align: right;">
               <p><strong>Due Date:</strong> ${new Date(invoice.dueDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
-              <p><strong>Status:</strong> <span class="status-badge">${invoice.status.toUpperCase()}</span></p>
             </div>
           </div>
           

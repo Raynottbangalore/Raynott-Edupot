@@ -573,7 +573,7 @@ const Dashboard = ({ user, onLogout }) => {
                 }`}
             >
               <div className="flex items-center space-x-2">
-                {/* <Users size={16} /> */}
+                <Users size={16} />
                 <span>Billing</span>
               </div>
               {activeTab === 'billing' && (
