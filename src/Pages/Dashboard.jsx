@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { LogOut, Users, UserPlus, List, BarChart3, Search, DollarSign, Award, Ticket, School, MapPin, Award as AwardIcon, Edit, X, Save, Loader, Building, Mail, Phone, Calendar } from 'lucide-react';
+import { LogOut, Users, UserPlus, List, BarChart3, Search, DollarSign, Award, Ticket, School, MapPin, Award as AwardIcon, Edit, X, Save, Loader, Building, Mail, Phone, Calendar, Receipt } from 'lucide-react';
 import StudentList from '../Components/StudentList';
 import AllStudents from '../Components/AllStudents';
 import AddStudent from '../Components/AddStudents';
@@ -573,7 +573,7 @@ const Dashboard = ({ user, onLogout }) => {
                 }`}
             >
               <div className="flex items-center space-x-2">
-                <Users size={16} />
+                <Receipt size={16} />
                 <span>Billing</span>
               </div>
               {activeTab === 'billing' && (

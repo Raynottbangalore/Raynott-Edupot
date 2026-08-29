@@ -1455,6 +1455,185 @@ static async saveAttendance(attendanceData) {
     };
   }
 }
+// Add to src/service/StudentApi.js
+
+  // ────────────────────────────────────────────────
+  // Billing Methods
+  // ────────────────────────────────────────────────
+
+  /**
+   * Create a new invoice
+   */
+  static async createInvoice(invoiceData) {
+    try {
+      const data = await this.makeRequest(`${BASE_URL}/billing/invoices`, {
+        method: 'POST',
+        body: JSON.stringify(invoiceData),
+      });
+      return data;
+    } catch (error) {
+      console.error('❌ Create invoice error:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Get all invoices with filters
+   */
+  static async getAllInvoices(filters = {}) {
+    try {
+      const params = new URLSearchParams();
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value) params.append(key, value);
+      });
+      
+      const queryString = params.toString();
+      const url = `${BASE_URL}/billing/invoices${queryString ? `?${queryString}` : ''}`;
+      
+      const data = await this.makeRequest(url, { method: 'GET' });
+      return data;
+    } catch (error) {
+      console.error('❌ Get all invoices error:', error);
+      return { success: false, error: error.message, invoices: [] };
+    }
+  }
+
+  /**
+   * Get invoice by ID
+   */
+  static async getInvoice(invoiceId) {
+    try {
+      const data = await this.makeRequest(`${BASE_URL}/billing/invoices/${invoiceId}`, {
+        method: 'GET',
+      });
+      return data;
+    } catch (error) {
+      console.error('❌ Get invoice error:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Get invoices by student
+   */
+  static async getInvoicesByStudent(studentId) {
+    try {
+      const data = await this.makeRequest(`${BASE_URL}/billing/students/${studentId}/invoices`, {
+        method: 'GET',
+      });
+      return data;
+    } catch (error) {
+      console.error('❌ Get invoices by student error:', error);
+      return { success: false, error: error.message, invoices: [] };
+    }
+  }
+
+  /**
+   * Record payment for an invoice
+   */
+  static async recordPayment(invoiceId, paymentData) {
+    try {
+      const data = await this.makeRequest(`${BASE_URL}/billing/invoices/${invoiceId}/payments`, {
+        method: 'POST',
+        body: JSON.stringify(paymentData),
+      });
+      return data;
+    } catch (error) {
+      console.error('❌ Record payment error:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Update invoice status
+   */
+  static async updateInvoiceStatus(invoiceId, status) {
+    try {
+      const data = await this.makeRequest(`${BASE_URL}/billing/invoices/${invoiceId}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status }),
+      });
+      return data;
+    } catch (error) {
+      console.error('❌ Update invoice status error:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Delete invoice
+   */
+  static async deleteInvoice(invoiceId) {
+    try {
+      const data = await this.makeRequest(`${BASE_URL}/billing/invoices/${invoiceId}`, {
+        method: 'DELETE',
+      });
+      return data;
+    } catch (error) {
+      console.error('❌ Delete invoice error:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Get payment history for a student
+   */
+  static async getPaymentHistory(studentId) {
+    try {
+      const data = await this.makeRequest(`${BASE_URL}/billing/students/${studentId}/payments`, {
+        method: 'GET',
+      });
+      return data;
+    } catch (error) {
+      console.error('❌ Get payment history error:', error);
+      return { success: false, error: error.message, payments: [] };
+    }
+  }
+
+  /**
+   * Get student billing summary
+   */
+  static async getStudentBillingSummary(studentId) {
+    try {
+      const data = await this.makeRequest(`${BASE_URL}/billing/students/${studentId}/summary`, {
+        method: 'GET',
+      });
+      return data;
+    } catch (error) {
+      console.error('❌ Get student billing summary error:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Get class billing report
+   */
+  static async getClassBillingReport(grade, section) {
+    try {
+      const data = await this.makeRequest(`${BASE_URL}/billing/reports/class/${grade}/${section}`, {
+        method: 'GET',
+      });
+      return data;
+    } catch (error) {
+      console.error('❌ Get class billing report error:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Get billing stats
+   */
+  static async getBillingStats() {
+    try {
+      const data = await this.makeRequest(`${BASE_URL}/billing/stats`, {
+        method: 'GET',
+      });
+      return data;
+    } catch (error) {
+      console.error('❌ Get billing stats error:', error);
+      return { success: false, error: error.message };
+    }
+  }
 }
 
 export default StudentApi;

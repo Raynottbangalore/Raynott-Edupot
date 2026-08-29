@@ -28,36 +28,36 @@ const Billing = () => {
   // Refs for PDF generation
   const invoiceRef = useRef(null);
   
-  // Invoice form state
+  // Invoice form state 
   const [invoiceData, setInvoiceData] = useState({
     studentId: '',
-    items: [{ description: 'Tuition Fee', amount: 5000, quantity: 1 }],
-    dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    notes: 'Please make the payment before the due date',
+    items: [{ description: '', amount: '', quantity: 1 }],
+    dueDate: '',
+    notes: '',
     invoiceNumber: '',
     date: new Date().toISOString().split('T')[0]
   });
 
   // Sample invoice for preview
-  const sampleInvoice = {
-    invoiceNumber: 'INV-2024-0001',
-    date: new Date().toISOString().split('T')[0],
-    dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    studentName: 'Rahul Sharma',
-    studentAdmission: 'ADM-2024-001',
-    studentGrade: '10',
-    studentSection: 'A',
-    studentFather: 'Mr. Rajesh Sharma',
-    studentPhone: '+91 9876543210',
-    items: [
-      { description: 'Tuition Fee', amount: 5000, quantity: 1 },
-      { description: 'Lab Fee', amount: 1000, quantity: 1 },
-      { description: 'Library Fee', amount: 500, quantity: 1 }
-    ],
-    total: 6500,
-    status: 'pending',
-    notes: 'Please make the payment before the due date'
-  };
+  // const sampleInvoice = {
+  //   invoiceNumber: 'INV-2024-0001',
+  //   date: new Date().toISOString().split('T')[0],
+  //   dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+  //   studentName: 'Rahul Sharma',
+  //   studentAdmission: 'ADM-2024-001',
+  //   studentGrade: '10',
+  //   studentSection: 'A',
+  //   studentFather: 'Mr. Rajesh Sharma',
+  //   studentPhone: '+91 9876543210',
+  //   items: [
+  //     { description: 'Tuition Fee', amount: 5000, quantity: 1 },
+  //     { description: 'Lab Fee', amount: 1000, quantity: 1 },
+  //     { description: 'Library Fee', amount: 500, quantity: 1 }
+  //   ],
+  //   total: 6500,
+  //   status: 'pending',
+  //   notes: 'Please make the payment before the due date'
+  // };
 
   // Load students on mount
   useEffect(() => {
@@ -175,16 +175,7 @@ const Billing = () => {
     return Array.from(sectionSet).sort();
   }, [students]);
 
-  // Generate invoice number
-  const generateInvoiceNumber = () => {
-    const date = new Date();
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const random = String(Math.floor(Math.random() * 10000)).padStart(4, '0');
-    return `INV-${year}${month}-${random}`;
-  };
-
-  // Handle generate invoice
+  // Handle generate invoice - UPDATED to use API
   const handleGenerateInvoice = async () => {
     if (!invoiceData.studentId) {
       toast.error('Please select a student');
@@ -201,35 +192,45 @@ const Billing = () => {
 
     setIsSaving(true);
     try {
-      const total = invoiceData.items.reduce((sum, item) => sum + (item.amount * item.quantity), 0);
+      // Get student details
       const student = students.find(s => s.studentId === invoiceData.studentId);
       
-      const newInvoice = {
-        ...invoiceData,
-        invoiceNumber: generateInvoiceNumber(),
-        total: total,
-        status: 'pending',
-        createdAt: new Date().toISOString(),
+      // Prepare invoice data for API
+      const invoicePayload = {
+        studentId: invoiceData.studentId,
         studentName: student?.basicInfo?.name || '',
         studentAdmission: student?.basicInfo?.admissionNo || '',
         studentGrade: student?.basicInfo?.grade || '',
         studentSection: student?.basicInfo?.section || '',
         studentFather: student?.basicInfo?.fatherName || '',
-        studentPhone: student?.basicInfo?.fatherPhone || ''
+        studentPhone: student?.basicInfo?.fatherPhone || '',
+        items: invoiceData.items.map(item => ({
+          description: item.description,
+          amount: parseFloat(item.amount) || 0,
+          quantity: parseInt(item.quantity) || 1
+        })),
+        dueDate: invoiceData.dueDate,
+        notes: invoiceData.notes,
+        date: invoiceData.date
       };
 
-      // Save to localStorage
-      const existingInvoices = JSON.parse(localStorage.getItem('invoices') || '[]');
-      existingInvoices.push(newInvoice);
-      localStorage.setItem('invoices', JSON.stringify(existingInvoices));
-
-      setGeneratedInvoice(newInvoice);
-      toast.success(`Invoice ${newInvoice.invoiceNumber} generated successfully!`);
+      // Call API to create invoice
+      const result = await StudentApi.createInvoice(invoicePayload);
       
-      // Close invoice modal and open preview
-      setShowInvoiceModal(false);
-      setShowPreviewModal(true);
-      resetInvoiceForm();
+      if (result.success) {
+        setGeneratedInvoice(result.invoice);
+        toast.success(`Invoice ${result.invoice.invoiceNumber} generated successfully!`);
+        
+        // Close invoice modal and open preview
+        setShowInvoiceModal(false);
+        setShowPreviewModal(true);
+        resetInvoiceForm();
+        
+        // Refresh students to update pending amounts
+        await loadStudents();
+      } else {
+        toast.error(result.error || 'Failed to generate invoice');
+      }
     } catch (error) {
       console.error('Error generating invoice:', error);
       toast.error('Failed to generate invoice');
@@ -238,13 +239,13 @@ const Billing = () => {
     }
   };
 
-  // Reset invoice form
+  // Reset invoice form - EMPTY FIELDS
   const resetInvoiceForm = () => {
     setInvoiceData({
       studentId: '',
-      items: [{ description: 'Tuition Fee', amount: 5000, quantity: 1 }],
-      dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      notes: 'Please make the payment before the due date',
+      items: [{ description: '', amount: '', quantity: 1 }],
+      dueDate: '',
+      notes: '',
       invoiceNumber: '',
       date: new Date().toISOString().split('T')[0]
     });
@@ -255,7 +256,7 @@ const Billing = () => {
   const addItemRow = () => {
     setInvoiceData(prev => ({
       ...prev,
-      items: [...prev.items, { description: '', amount: 0, quantity: 1 }]
+      items: [...prev.items, { description: '', amount: '', quantity: 1 }]
     }));
   };
 
@@ -282,16 +283,24 @@ const Billing = () => {
 
   // Calculate total
   const calculateTotal = () => {
-    return invoiceData.items.reduce((sum, item) => sum + (item.amount * item.quantity), 0);
+    return invoiceData.items.reduce((sum, item) => sum + ((parseFloat(item.amount) || 0) * (parseInt(item.quantity) || 1)), 0);
   };
 
-  // View student's invoices
-  const viewStudentInvoices = (student) => {
-    const invoices = JSON.parse(localStorage.getItem('invoices') || '[]');
-    const filtered = invoices.filter(inv => inv.studentId === student.studentId);
-    setStudentInvoices(filtered);
-    setSelectedStudent(student);
-    setShowStudentInvoices(true);
+  // View student's invoices 
+  const viewStudentInvoices = async (student) => {
+    try {
+      const result = await StudentApi.getInvoicesByStudent(student.studentId);
+      if (result.success) {
+        setStudentInvoices(result.invoices || []);
+        setSelectedStudent(student);
+        setShowStudentInvoices(true);
+      } else {
+        toast.error('Failed to load invoices');
+      }
+    } catch (error) {
+      console.error('Error loading student invoices:', error);
+      toast.error('Failed to load invoices');
+    }
   };
 
   // Download PDF using html2pdf
@@ -350,7 +359,6 @@ const Billing = () => {
         <td style="padding: 10px; border-bottom: 1px solid #e5e7eb; text-align: center;">${index + 1}</td>
         <td style="padding: 10px; border-bottom: 1px solid #e5e7eb;">${item.description}</td>
         <td style="padding: 10px; border-bottom: 1px solid #e5e7eb; text-align: right;">₹${item.amount.toLocaleString()}</td>
-        <td style="padding: 10px; border-bottom: 1px solid #e5e7eb; text-align: center;">${item.quantity}</td>
         <td style="padding: 10px; border-bottom: 1px solid #e5e7eb; text-align: right;">₹${(item.amount * item.quantity).toLocaleString()}</td>
       </tr>
     `).join('');
@@ -546,11 +554,8 @@ const Billing = () => {
           <div class="invoice-details">
             <div>
               <p><strong>Invoice Number:</strong> ${invoice.invoiceNumber}</p>
-              <p><strong>Date:</strong> ${new Date(invoice.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
-            </div>
-            <div style="text-align: right;">
-              <p><strong>Due Date:</strong> ${new Date(invoice.dueDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
-            </div>
+              </div>
+              <p><strong>Date:</strong> ${new Date(invoice.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</p>         
           </div>
           
           <div class="student-details">
@@ -571,7 +576,6 @@ const Billing = () => {
                 <th style="width: 10%; text-align: center;">#</th>
                 <th style="width: 45%;">Description</th>
                 <th style="width: 20%; text-align: right;">Amount (₹)</th>
-                <th style="width: 10%; text-align: center;">Quantity</th>
                 <th style="width: 15%; text-align: right;">Total (₹)</th>
               </tr>
             </thead>
@@ -622,10 +626,19 @@ const Billing = () => {
         <div className="flex justify-between mb-6 p-4 bg-gray-50 rounded-lg">
           <div>
             <p className="text-sm"><span className="font-semibold">Invoice Number:</span> {invoice.invoiceNumber}</p>
-            <p className="text-sm"><span className="font-semibold">Date:</span> {new Date(invoice.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
+            {/* <p className="text-sm"><span className="font-semibold">Date:</span> {new Date(invoice.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</p> */}
           </div>
           <div className="text-right">
-            <p className="text-sm"><span className="font-semibold">Due Date:</span> {new Date(invoice.dueDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
+            <p className="text-sm"><span className="font-semibold">Date:</span> {new Date(invoice.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
+           
+            {/* <p className="text-sm"><span className="font-semibold">Due Date:</span> {new Date(invoice.dueDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</p> */}
+            {/* <p className="text-sm">
+              <span className="font-semibold">Status:</span>{' '}
+              <span className={`px-3 py-1 rounded-full text-sm font-medium`}
+                style={{ backgroundColor: statusBg, color: statusColor }}>
+                {invoice.status.toUpperCase()}
+              </span>
+            </p> */}
           </div>
         </div>
 
@@ -646,11 +659,11 @@ const Billing = () => {
         <table className="w-full border-collapse">
           <thead>
             <tr className="bg-indigo-600 text-white">
-              <th className="p-3 text-left text-sm">#</th>
+              <th className="p-3 text-left text-sm"></th>
               <th className="p-3 text-left text-sm">Description</th>
-              <th className="p-3 text-right text-sm">Amount (₹)</th>
-              <th className="p-3 text-center text-sm">Quantity</th>
-              <th className="p-3 text-right text-sm">Total (₹)</th>
+              <th className="p-3 text-center text-sm">Amount (₹)</th>
+              {/* <th className="p-3 text-center text-sm">Quantity</th> */}
+              <th className="p-3 text-center text-sm">Total (₹)</th>
             </tr>
           </thead>
           <tbody>
@@ -658,9 +671,9 @@ const Billing = () => {
               <tr key={index} className="border-b border-gray-200">
                 <td className="p-3 text-center">{index + 1}</td>
                 <td className="p-3">{item.description}</td>
-                <td className="p-3 text-right">₹{item.amount.toLocaleString()}</td>
-                <td className="p-3 text-center">{item.quantity}</td>
-                <td className="p-3 text-right">₹{(item.amount * item.quantity).toLocaleString()}</td>
+                <td className="p-3 text-center">₹{item.amount.toLocaleString()}</td>
+                {/* <td className="p-3 text-center">{item.quantity}</td> */}
+                <td className="p-3 text-center">₹{(item.amount * item.quantity).toLocaleString()}</td>
               </tr>
             ))}
           </tbody>
@@ -943,14 +956,14 @@ const Billing = () => {
                           <input
                             type="number"
                             value={item.amount || ''}
-                            onChange={(e) => updateItem(index, 'amount', parseFloat(e.target.value) || 0)}
+                            onChange={(e) => updateItem(index, 'amount', e.target.value)}
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
                             placeholder="0"
                             min="0"
                             step="1"
                           />
                         </div>
-                        <div className="col-span-2">
+                        {/* <div className="col-span-2">
                           <label className="block text-xs text-gray-600 mb-1">Quantity</label>
                           <input
                             type="number"
@@ -960,11 +973,11 @@ const Billing = () => {
                             placeholder="1"
                             min="1"
                           />
-                        </div>
+                        </div> */}
                         <div className="col-span-1">
                           <label className="block text-xs text-gray-600 mb-1">Total</label>
                           <div className="text-sm font-semibold text-gray-800 py-2 px-1">
-                            ₹{(item.amount * item.quantity).toLocaleString()}
+                            ₹{((parseFloat(item.amount) || 0) * (parseInt(item.quantity) || 1)).toLocaleString()}
                           </div>
                         </div>
                         <div className="col-span-1">
@@ -991,7 +1004,7 @@ const Billing = () => {
                 </div>
 
                 {/* Due Date */}
-                <div>
+                {/* <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Due Date</label>
                   <input
                     type="date"
@@ -999,7 +1012,7 @@ const Billing = () => {
                     onChange={(e) => setInvoiceData(prev => ({ ...prev, dueDate: e.target.value }))}
                     className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
                   />
-                </div>
+                </div> */}
 
                 {/* Notes */}
                 <div>
@@ -1059,7 +1072,7 @@ const Billing = () => {
               </div>
               <div className="flex items-center space-x-2">
                 <button
-                  onClick={() => downloadPDF(generatedInvoice || sampleInvoice)}
+                  onClick={() => downloadPDF(generatedInvoice )}
                   disabled={isDownloading}
                   className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center gap-2 disabled:opacity-50"
                 >
@@ -1071,7 +1084,7 @@ const Billing = () => {
                   <span>{isDownloading ? 'Downloading...' : 'Download PDF'}</span>
                 </button>
                 <button
-                  onClick={() => printInvoice(generatedInvoice || sampleInvoice)}
+                  onClick={() => printInvoice(generatedInvoice )}
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2"
                 >
                   <Printer size={18} />
@@ -1090,7 +1103,7 @@ const Billing = () => {
             </div>
 
             <div className="p-8" ref={invoiceRef}>
-              {renderInvoicePreview(generatedInvoice || sampleInvoice)}
+              {renderInvoicePreview(generatedInvoice )}
             </div>
           </div>
         </div>
@@ -1141,6 +1154,12 @@ const Billing = () => {
                         </div>
                         <div className="text-right">
                           <p className="font-bold text-indigo-600">₹{invoice.total.toLocaleString()}</p>
+                          <span className={`px-2 py-1 text-xs rounded-full
+                            ${invoice.status === 'paid' ? 'bg-green-100 text-green-800' :
+                              invoice.status === 'partial' ? 'bg-amber-100 text-amber-800' :
+                              'bg-red-100 text-red-800'}`}>
+                            {invoice.status.toUpperCase()}
+                          </span>
                         </div>
                       </div>
                       <div className="mt-3 flex gap-2">
