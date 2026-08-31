@@ -1,6 +1,6 @@
 // src/Components/Billing.jsx
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Search,Eye,FileText,Receipt,X,Plus,Trash2,Loader,User,Printer,Download,Users} from 'lucide-react';
+import { Search, Eye, FileText, Receipt, X, Plus, Trash2, Loader, User, Printer, Download, Users, Clock } from 'lucide-react';
 import { toast } from 'react-toastify';
 import StudentApi from '../service/StudentApi';
 import html2pdf from 'html2pdf.js';
@@ -37,27 +37,6 @@ const Billing = () => {
     invoiceNumber: '',
     date: new Date().toISOString().split('T')[0]
   });
-
-  // Sample invoice for preview
-  // const sampleInvoice = {
-  //   invoiceNumber: 'INV-2024-0001',
-  //   date: new Date().toISOString().split('T')[0],
-  //   dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-  //   studentName: 'Rahul Sharma',
-  //   studentAdmission: 'ADM-2024-001',
-  //   studentGrade: '10',
-  //   studentSection: 'A',
-  //   studentFather: 'Mr. Rajesh Sharma',
-  //   studentPhone: '+91 9876543210',
-  //   items: [
-  //     { description: 'Tuition Fee', amount: 5000, quantity: 1 },
-  //     { description: 'Lab Fee', amount: 1000, quantity: 1 },
-  //     { description: 'Library Fee', amount: 500, quantity: 1 }
-  //   ],
-  //   total: 6500,
-  //   status: 'pending',
-  //   notes: 'Please make the payment before the due date'
-  // };
 
   // Load students on mount
   useEffect(() => {
@@ -175,7 +154,7 @@ const Billing = () => {
     return Array.from(sectionSet).sort();
   }, [students]);
 
-  // Handle generate invoice - UPDATED to use API
+  // Handle generate invoice
   const handleGenerateInvoice = async () => {
     if (!invoiceData.studentId) {
       toast.error('Please select a student');
@@ -192,10 +171,8 @@ const Billing = () => {
 
     setIsSaving(true);
     try {
-      // Get student details
       const student = students.find(s => s.studentId === invoiceData.studentId);
       
-      // Prepare invoice data for API
       const invoicePayload = {
         studentId: invoiceData.studentId,
         studentName: student?.basicInfo?.name || '',
@@ -214,19 +191,14 @@ const Billing = () => {
         date: invoiceData.date
       };
 
-      // Call API to create invoice
       const result = await StudentApi.createInvoice(invoicePayload);
       
       if (result.success) {
         setGeneratedInvoice(result.invoice);
         toast.success(`Invoice ${result.invoice.invoiceNumber} generated successfully!`);
-        
-        // Close invoice modal and open preview
         setShowInvoiceModal(false);
         setShowPreviewModal(true);
         resetInvoiceForm();
-        
-        // Refresh students to update pending amounts
         await loadStudents();
       } else {
         toast.error(result.error || 'Failed to generate invoice');
@@ -239,7 +211,7 @@ const Billing = () => {
     }
   };
 
-  // Reset invoice form - EMPTY FIELDS
+  // Reset invoice form 
   const resetInvoiceForm = () => {
     setInvoiceData({
       studentId: '',
@@ -303,6 +275,261 @@ const Billing = () => {
     }
   };
 
+  // Render Invoice Preview Content with inline styles
+  const renderInvoicePreview = (invoice) => {
+    const styles = {
+      container: {
+        border: '1px solid #e5e7eb',
+        borderRadius: '12px',
+        padding: '32px',
+        backgroundColor: '#ffffff',
+        fontFamily: 'Arial, Helvetica, sans-serif',
+        color: '#1f2937'
+      },
+      header: {
+        textAlign: 'center',
+        borderBottom: '2px solid #4f46e5',
+        paddingBottom: '24px',
+        marginBottom: '24px'
+      },
+      headerTitle: {
+        fontSize: '28px',
+        fontWeight: 'bold',
+        color: '#4f46e5',
+        margin: 0
+      },
+      headerSub: {
+        color: '#6b7280',
+        fontSize: '14px',
+        marginTop: '4px'
+      },
+      detailsRow: {
+        display: 'flex',
+        justifyContent: 'space-between',
+        marginBottom: '24px',
+        padding: '16px',
+        backgroundColor: '#f9fafb',
+        borderRadius: '8px'
+      },
+      detailsText: {
+        fontSize: '14px',
+        margin: '4px 0'
+      },
+      detailsLabel: {
+        fontWeight: '600',
+        color: '#374151'
+      },
+      studentBox: {
+        backgroundColor: '#f3f4f6',
+        padding: '16px',
+        borderRadius: '8px',
+        marginBottom: '24px',
+        borderLeft: '4px solid #4f46e5'
+      },
+      studentTitle: {
+        fontWeight: '600',
+        color: '#374151',
+        marginBottom: '12px',
+        fontSize: '14px'
+      },
+      studentGrid: {
+        display: 'grid',
+        gridTemplateColumns: '1fr 1fr',
+        gap: '8px 30px',
+        fontSize: '14px'
+      },
+      studentText: {
+        margin: '4px 0'
+      },
+      studentLabel: {
+        fontWeight: '600',
+        color: '#374151'
+      },
+      table: {
+        width: '100%',
+        borderCollapse: 'collapse',
+        margin: '20px 0'
+      },
+      tableHead: {
+        backgroundColor: '#4f46e5',
+        color: 'white'
+      },
+      tableHeaderCenter: {
+        padding: '12px',
+        textAlign: 'center',
+        fontSize: '13px',
+        fontWeight: '600'
+      },
+      tableHeader: {
+        padding: '12px',
+        textAlign: 'left',
+        fontSize: '13px',
+        fontWeight: '600'
+      },
+      tableHeaderRight: {
+        padding: '12px',
+        textAlign: 'right',
+        fontSize: '13px',
+        fontWeight: '600'
+      },
+      tableRow: {
+        borderBottom: '1px solid #e5e7eb'
+      },
+      tableCell: {
+        padding: '10px',
+        fontSize: '14px'
+      },
+      tableCellCenter: {
+        padding: '10px',
+        textAlign: 'center',
+        fontSize: '14px'
+      },
+      tableCellRight: {
+        padding: '10px',
+        textAlign: 'right',
+        fontSize: '14px'
+      },
+      totalBox: {
+        marginTop: '24px',
+        padding: '16px',
+        backgroundColor: '#eef2ff',
+        borderRadius: '8px'
+      },
+      totalRow: {
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center'
+      },
+      totalLabel: {
+        fontWeight: '600',
+        color: '#374151'
+      },
+      totalAmount: {
+        fontSize: '24px',
+        fontWeight: 'bold',
+        color: '#4f46e5'
+      },
+      notesBox: {
+        marginTop: '24px',
+        padding: '16px',
+        backgroundColor: '#f9fafb',
+        borderRadius: '8px',
+        border: '1px solid #e5e7eb'
+      },
+      notesTitle: {
+        fontWeight: '600',
+        color: '#374151',
+        marginBottom: '8px',
+        fontSize: '14px'
+      },
+      notesText: {
+        color: '#6b7280',
+        fontSize: '14px',
+        margin: 0
+      },
+      footer: {
+        marginTop: '32px',
+        textAlign: 'center',
+        color: '#9ca3af',
+        fontSize: '12px',
+        borderTop: '1px solid #e5e7eb',
+        paddingTop: '16px'
+      },
+      footerText: {
+        marginTop: '4px',
+        fontSize: '11px'
+      }
+    };
+
+    return (
+      <div style={styles.container}>
+        {/* Header */}
+        <div style={styles.header}>
+          <h1 style={styles.headerTitle}>INVOICE</h1>
+          <p style={styles.headerSub}>Payment Receipt</p>
+        </div>
+
+        {/* Invoice Details */}
+        <div style={styles.detailsRow}>
+          <div>
+            <p style={styles.detailsText}>
+              <span style={styles.detailsLabel}>Invoice Number:</span> {invoice.invoiceNumber}
+            </p>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <p style={styles.detailsText}>
+              <span style={styles.detailsLabel}>Date:</span> {new Date(invoice.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+            </p>
+          </div>
+        </div>
+
+        {/* Student Details */}
+        <div style={styles.studentBox}>
+          <h3 style={styles.studentTitle}>STUDENT DETAILS</h3>
+          <div style={styles.studentGrid}>
+            <p style={styles.studentText}>
+              <span style={styles.studentLabel}>Name:</span> {invoice.studentName || 'N/A'}
+            </p>
+            <p style={styles.studentText}>
+              <span style={styles.studentLabel}>Admission Number:</span> {invoice.studentAdmission || 'N/A'}
+            </p>
+            <p style={styles.studentText}>
+              <span style={styles.studentLabel}>Grade:</span> {invoice.studentGrade || 'N/A'} - {invoice.studentSection || 'N/A'}
+            </p>
+            <p style={styles.studentText}>
+              <span style={styles.studentLabel}>Father's Name:</span> {invoice.studentFather || 'N/A'}
+            </p>
+            <p style={styles.studentText}>
+              <span style={styles.studentLabel}>Phone:</span> {invoice.studentPhone || 'N/A'}
+            </p>
+          </div>
+        </div>
+
+        {/* Items Table */}
+        <h3 style={{ fontWeight: '600', color: '#374151', marginBottom: '12px' }}>INVOICE ITEMS</h3>
+        <table style={styles.table}>
+          <thead>
+            <tr style={styles.tableHead}>
+              <th style={{ ...styles.tableHeaderCenter, width: '10%' }}>#</th>
+              <th style={{ ...styles.tableHeader, width: '45%' }}>Description</th>
+              <th style={{ ...styles.tableHeaderRight, width: '20%' }}>Amount (₹)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {invoice.items.map((item, index) => (
+              <tr key={index} style={styles.tableRow}>
+                <td style={styles.tableCellCenter}>{index + 1}</td>
+                <td style={styles.tableCell}>{item.description}</td>
+                <td style={styles.tableCellRight}>₹{item.amount.toLocaleString()}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        {/* Total */}
+        <div style={styles.totalBox}>
+          <div style={styles.totalRow}>
+            <span style={styles.totalLabel}>Total Amount:</span>
+            <span style={styles.totalAmount}>₹{invoice.total.toLocaleString()}</span>
+          </div>
+        </div>
+
+        {/* Notes */}
+        {invoice.notes && (
+          <div style={styles.notesBox}>
+            <h4 style={styles.notesTitle}>NOTES</h4>
+            <p style={styles.notesText}>{invoice.notes}</p>
+          </div>
+        )}
+
+        {/* Footer */}
+        <div style={styles.footer}>
+          <p style={styles.footerText}>This is a system generated invoice</p>
+        </div>
+      </div>
+    );
+  };
+
   // Download PDF using html2pdf
   const downloadPDF = async (invoice) => {
     if (!invoiceRef.current) {
@@ -321,7 +548,29 @@ const Billing = () => {
         html2canvas: { 
           scale: 2,
           useCORS: true,
-          letterRendering: true
+          letterRendering: true,
+          backgroundColor: '#ffffff',
+          logging: false,
+          onclone: (clonedDoc) => {
+            const allElements = clonedDoc.querySelectorAll('*');
+            allElements.forEach(el => {
+              if (el.style.color && el.style.color.includes('oklch')) {
+                el.style.color = '#1f2937';
+              }
+              if (el.style.backgroundColor && el.style.backgroundColor.includes('oklch')) {
+                el.style.backgroundColor = '#ffffff';
+              }
+              if (el.className && typeof el.className === 'string') {
+                const classes = el.className.split(' ');
+                const safeClasses = classes.filter(cls => 
+                  !cls.includes('oklch') && 
+                  !cls.includes('bg-') && 
+                  !cls.includes('text-')
+                );
+                el.className = safeClasses.join(' ');
+              }
+            });
+          }
         },
         jsPDF: { 
           unit: 'mm', 
@@ -341,7 +590,7 @@ const Billing = () => {
     }
   };
 
-  // Print Invoice
+  // Print Invoice with exact design
   const printInvoice = (invoice) => {
     const printWindow = window.open('', '_blank', 'width=800,height=600');
     if (!printWindow) {
@@ -349,17 +598,11 @@ const Billing = () => {
       return;
     }
 
-    const statusColor = invoice.status === 'paid' ? '#16a34a' : 
-                       invoice.status === 'partial' ? '#d97706' : '#dc2626';
-    const statusBg = invoice.status === 'paid' ? '#dcfce7' : 
-                    invoice.status === 'partial' ? '#fef3c7' : '#fee2e2';
-
     const itemsHTML = invoice.items.map((item, index) => `
       <tr>
         <td style="padding: 10px; border-bottom: 1px solid #e5e7eb; text-align: center;">${index + 1}</td>
         <td style="padding: 10px; border-bottom: 1px solid #e5e7eb;">${item.description}</td>
         <td style="padding: 10px; border-bottom: 1px solid #e5e7eb; text-align: right;">₹${item.amount.toLocaleString()}</td>
-        <td style="padding: 10px; border-bottom: 1px solid #e5e7eb; text-align: right;">₹${(item.amount * item.quantity).toLocaleString()}</td>
       </tr>
     `).join('');
 
@@ -369,7 +612,11 @@ const Billing = () => {
       <head>
         <title>Invoice ${invoice.invoiceNumber}</title>
         <style>
-          * { margin: 0; padding: 0; box-sizing: border-box; }
+          * { 
+            margin: 0; 
+            padding: 0; 
+            box-sizing: border-box; 
+          }
           body { 
             font-family: Arial, Helvetica, sans-serif; 
             padding: 40px; 
@@ -386,26 +633,26 @@ const Billing = () => {
           }
           .header { 
             text-align: center; 
-            border-bottom: 3px solid #4f46e5; 
-            padding-bottom: 20px; 
-            margin-bottom: 30px; 
+            border-bottom: 2px solid #4f46e5; 
+            padding-bottom: 24px; 
+            margin-bottom: 24px; 
           }
           .header h1 { 
             color: #4f46e5; 
-            font-size: 32px; 
-            letter-spacing: 2px;
+            font-size: 28px; 
+            font-weight: bold;
             margin: 0;
           }
           .header p {
             color: #6b7280;
             font-size: 14px;
-            margin-top: 5px;
+            margin-top: 4px;
           }
           .invoice-details { 
             display: flex; 
             justify-content: space-between; 
-            margin-bottom: 30px;
-            padding: 15px;
+            margin-bottom: 24px;
+            padding: 16px;
             background: #f9fafb;
             border-radius: 8px;
           }
@@ -417,16 +664,17 @@ const Billing = () => {
             color: #374151;
           }
           .student-details { 
-            margin-bottom: 30px; 
-            padding: 20px; 
+            margin-bottom: 24px; 
+            padding: 16px; 
             background: #f3f4f6; 
             border-radius: 8px;
             border-left: 4px solid #4f46e5;
           }
           .student-details h3 { 
             margin: 0 0 12px 0; 
-            color: #4f46e5; 
-            font-size: 16px;
+            color: #374151; 
+            font-size: 14px;
+            font-weight: 600;
           }
           .student-grid {
             display: grid;
@@ -439,6 +687,11 @@ const Billing = () => {
           }
           .student-grid strong {
             color: #374151;
+          }
+          .items-title {
+            font-weight: 600;
+            color: #374151;
+            margin-bottom: 12px;
           }
           table { 
             width: 100%; 
@@ -453,39 +706,54 @@ const Billing = () => {
             font-size: 13px;
             font-weight: 600;
           }
-          th:last-child, td:last-child {
+          th:first-child {
+            text-align: center;
+            width: 10%;
+          }
+          th:nth-child(2) {
+            width: 45%;
+          }
+          th:nth-child(3) {
             text-align: right;
+            width: 20%;
+          }
+          th:last-child {
+            text-align: right;
+            width: 25%;
           }
           td { 
             padding: 10px; 
             border-bottom: 1px solid #e5e7eb;
             font-size: 14px;
           }
-          tr:hover {
-            background: #f9fafb;
+          td:first-child {
+            text-align: center;
+          }
+          td:nth-child(3),
+          td:last-child {
+            text-align: right;
           }
           .total { 
-            text-align: right; 
-            font-size: 20px; 
-            font-weight: bold; 
-            margin: 20px 0; 
-            padding: 20px; 
+            margin-top: 24px; 
+            padding: 16px; 
             background: #eef2ff; 
             border-radius: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+          }
+          .total .label {
+            font-weight: 600;
+            color: #374151;
+          }
+          .total .amount {
+            font-size: 24px;
+            font-weight: bold;
             color: #4f46e5;
           }
-          .status-badge {
-            display: inline-block;
-            padding: 4px 16px;
-            border-radius: 20px;
-            font-weight: 600;
-            font-size: 13px;
-            background: ${statusBg};
-            color: ${statusColor};
-          }
           .notes { 
-            margin-top: 30px; 
-            padding: 20px; 
+            margin-top: 24px; 
+            padding: 16px; 
             background: #f9fafb; 
             border-radius: 8px;
             border: 1px solid #e5e7eb;
@@ -494,6 +762,7 @@ const Billing = () => {
             margin: 0 0 8px 0;
             color: #374151;
             font-size: 14px;
+            font-weight: 600;
           }
           .notes p {
             margin: 0;
@@ -502,11 +771,15 @@ const Billing = () => {
           }
           .footer { 
             text-align: center; 
-            margin-top: 40px; 
+            margin-top: 32px; 
             color: #9ca3af; 
             font-size: 12px; 
             border-top: 1px solid #e5e7eb; 
-            padding-top: 20px;
+            padding-top: 16px;
+          }
+          .footer p {
+            margin-top: 4px;
+            font-size: 11px;
           }
           .print-btn { 
             background: #4f46e5; 
@@ -517,12 +790,13 @@ const Billing = () => {
             font-size: 16px; 
             cursor: pointer; 
             margin: 0 10px 20px 0;
+            font-weight: 500;
           }
           .print-btn:hover { 
             background: #4338ca; 
           }
           .print-btn.secondary {
-            background: #6b7280;
+            background: #6b7280; 
           }
           .print-btn.secondary:hover {
             background: #4b5563;
@@ -530,8 +804,11 @@ const Billing = () => {
           @media print {
             .no-print { display: none !important; }
             body { background: white; padding: 20px; }
-            .invoice-container { box-shadow: none; padding: 20px; }
-            tr:hover { background: transparent; }
+            .invoice-container { 
+              box-shadow: none; 
+              padding: 30px;
+              border-radius: 0;
+            }
           }
           @media (max-width: 640px) {
             .student-grid { grid-template-columns: 1fr; }
@@ -541,8 +818,12 @@ const Billing = () => {
       </head>
       <body>
         <div style="text-align: center; margin-bottom: 20px;">
-          <button class="print-btn no-print" onclick="window.print()">Print Invoice</button>
-          <button class="print-btn secondary no-print" onclick="window.close()">Close</button>
+          <button class="print-btn no-print" onclick="window.print()">
+            <span style="margin-right: 8px;">🖨️</span> Print Invoice
+          </button>
+          <button class="print-btn secondary no-print" onclick="window.close()">
+            <span style="margin-right: 8px;">✕</span> Close
+          </button>
         </div>
         
         <div class="invoice-container">
@@ -554,12 +835,14 @@ const Billing = () => {
           <div class="invoice-details">
             <div>
               <p><strong>Invoice Number:</strong> ${invoice.invoiceNumber}</p>
-              </div>
-              <p><strong>Date:</strong> ${new Date(invoice.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</p>         
+            </div>
+            <div style="text-align: right;">
+              <p><strong>Date:</strong> ${new Date(invoice.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
+            </div>
           </div>
           
           <div class="student-details">
-            <h3>Student Details</h3>
+            <h3>STUDENT DETAILS</h3>
             <div class="student-grid">
               <p><strong>Name:</strong> ${invoice.studentName || 'N/A'}</p>
               <p><strong>Admission Number:</strong> ${invoice.studentAdmission || 'N/A'}</p>
@@ -569,14 +852,13 @@ const Billing = () => {
             </div>
           </div>
           
-          <h3 style="margin: 20px 0 10px 0; color: #374151;">Invoice Items</h3>
+          <h3 class="items-title">INVOICE ITEMS</h3>
           <table>
             <thead>
               <tr>
-                <th style="width: 10%; text-align: center;">#</th>
-                <th style="width: 45%;">Description</th>
-                <th style="width: 20%; text-align: right;">Amount (₹)</th>
-                <th style="width: 15%; text-align: right;">Total (₹)</th>
+                <th>#</th>
+                <th>Description</th>
+                <th>Amount (₹)</th>
               </tr>
             </thead>
             <tbody>
@@ -585,18 +867,19 @@ const Billing = () => {
           </table>
           
           <div class="total">
-            Total Amount: ₹${invoice.total.toLocaleString()}
+            <span class="label">Total Amount:</span>
+            <span class="amount">₹${invoice.total.toLocaleString()}</span>
           </div>
           
           ${invoice.notes ? `
             <div class="notes">
-              <h4>Notes</h4>
+              <h4>NOTES</h4>
               <p>${invoice.notes}</p>
             </div>
           ` : ''}
           
           <div class="footer">
-            <p style="margin-top: 4px; font-size: 11px;">This is a system generated invoice</p>
+            <p>This is a system generated invoice</p>
           </div>
         </div>
       </body>
@@ -607,102 +890,14 @@ const Billing = () => {
     printWindow.document.close();
   };
 
-  // Render Invoice Preview Content
-  const renderInvoicePreview = (invoice) => {
-    const statusColor = invoice.status === 'paid' ? '#16a34a' : 
-                       invoice.status === 'partial' ? '#d97706' : '#dc2626';
-    const statusBg = invoice.status === 'paid' ? '#dcfce7' : 
-                    invoice.status === 'partial' ? '#fef3c7' : '#fee2e2';
-
-    return (
-      <div className="border rounded-xl p-8 bg-white" id="invoice-content">
-        {/* Header */}
-        <div className="text-center border-b-2 border-indigo-600 pb-6 mb-6">
-          <h1 className="text-3xl font-bold text-indigo-600">INVOICE</h1>
-          <p className="text-gray-500 text-sm mt-1">Payment Receipt</p>
-        </div>
-
-        {/* Invoice Details */}
-        <div className="flex justify-between mb-6 p-4 bg-gray-50 rounded-lg">
-          <div>
-            <p className="text-sm"><span className="font-semibold">Invoice Number:</span> {invoice.invoiceNumber}</p>
-            {/* <p className="text-sm"><span className="font-semibold">Date:</span> {new Date(invoice.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</p> */}
-          </div>
-          <div className="text-right">
-            <p className="text-sm"><span className="font-semibold">Date:</span> {new Date(invoice.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
-           
-            {/* <p className="text-sm"><span className="font-semibold">Due Date:</span> {new Date(invoice.dueDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</p> */}
-            {/* <p className="text-sm">
-              <span className="font-semibold">Status:</span>{' '}
-              <span className={`px-3 py-1 rounded-full text-sm font-medium`}
-                style={{ backgroundColor: statusBg, color: statusColor }}>
-                {invoice.status.toUpperCase()}
-              </span>
-            </p> */}
-          </div>
-        </div>
-
-        {/* Student Details */}
-        <div className="bg-gray-50 p-4 rounded-lg mb-6 border-l-4 border-indigo-600">
-          <h3 className="font-semibold text-gray-800 mb-3 text-sm">STUDENT DETAILS</h3>
-          <div className="grid grid-cols-2 gap-2 text-sm">
-            <p><span className="font-semibold">Name:</span> {invoice.studentName || 'N/A'}</p>
-            <p><span className="font-semibold">Admission Number:</span> {invoice.studentAdmission || 'N/A'}</p>
-            <p><span className="font-semibold">Grade:</span> {invoice.studentGrade || 'N/A'} - {invoice.studentSection || 'N/A'}</p>
-            <p><span className="font-semibold">Father's Name:</span> {invoice.studentFather || 'N/A'}</p>
-            <p><span className="font-semibold">Phone:</span> {invoice.studentPhone || 'N/A'}</p>
-          </div>
-        </div>
-
-        {/* Items Table */}
-        <h3 className="font-semibold text-gray-800 mb-3">INVOICE ITEMS</h3>
-        <table className="w-full border-collapse">
-          <thead>
-            <tr className="bg-indigo-600 text-white">
-              <th className="p-3 text-left text-sm"></th>
-              <th className="p-3 text-left text-sm">Description</th>
-              <th className="p-3 text-center text-sm">Amount (₹)</th>
-              {/* <th className="p-3 text-center text-sm">Quantity</th> */}
-              <th className="p-3 text-center text-sm">Total (₹)</th>
-            </tr>
-          </thead>
-          <tbody>
-            {invoice.items.map((item, index) => (
-              <tr key={index} className="border-b border-gray-200">
-                <td className="p-3 text-center">{index + 1}</td>
-                <td className="p-3">{item.description}</td>
-                <td className="p-3 text-center">₹{item.amount.toLocaleString()}</td>
-                {/* <td className="p-3 text-center">{item.quantity}</td> */}
-                <td className="p-3 text-center">₹{(item.amount * item.quantity).toLocaleString()}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-
-        {/* Total */}
-        <div className="mt-6 p-4 bg-indigo-50 rounded-lg">
-          <div className="flex justify-between items-center">
-            <span className="font-semibold text-gray-800">Total Amount:</span>
-            <span className="text-2xl font-bold text-indigo-700">
-              ₹{invoice.total.toLocaleString()}
-            </span>
-          </div>
-        </div>
-
-        {/* Notes */}
-        {invoice.notes && (
-          <div className="mt-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
-            <h4 className="font-semibold text-gray-800 mb-2 text-sm">NOTES</h4>
-            <p className="text-gray-600 text-sm">{invoice.notes}</p>
-          </div>
-        )}
-
-        {/* Footer */}
-        <div className="mt-8 text-center text-gray-400 text-sm border-t pt-4">
-          <p className="text-xs mt-1">This is a system generated invoice</p>
-        </div>
-      </div>
-    );
+  // Function to handle new invoice button
+  const handleNewInvoice = (student) => {
+    setSelectedStudent(student);
+    setInvoiceData(prev => ({ 
+      ...prev, 
+      studentId: student.studentId 
+    }));
+    setShowInvoiceModal(true);
   };
 
   return (
@@ -848,17 +1043,10 @@ const Billing = () => {
                       </div>
                     </div>
 
-                    {/* Action Buttons */}
+                    {/* Two Action Buttons - New Invoice & Previous Invoices */}
                     <div className="mt-4 pt-3 border-t border-gray-100 flex gap-2">
                       <button
-                        onClick={() => {
-                          setSelectedStudent(student);
-                          setInvoiceData(prev => ({ 
-                            ...prev, 
-                            studentId: student.studentId 
-                          }));
-                          setShowInvoiceModal(true);
-                        }}
+                        onClick={() => handleNewInvoice(student)}
                         className="flex-1 px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm flex items-center justify-center gap-2"
                       >
                         <FileText size={16} />
@@ -866,10 +1054,10 @@ const Billing = () => {
                       </button>
                       <button
                         onClick={() => viewStudentInvoices(student)}
-                        className="px-3 py-2 border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors text-sm flex items-center justify-center gap-2"
-                        title="View Invoices"
+                        className="flex-1 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm flex items-center justify-center gap-2"
                       >
-                        <Receipt size={16} />
+                        <Clock size={16} />
+                        <span>Previous Invoices</span>
                       </button>
                     </div>
                   </div>
@@ -888,7 +1076,7 @@ const Billing = () => {
           </div>
           <h3 className="text-xl font-semibold text-gray-800 mb-2">Search for Students</h3>
           <p className="text-gray-500 max-w-md mx-auto">
-            Enter a student name, admission number, father name, or phone number above to find students and generate invoices
+            Enter a student name, admission number, father name, or phone number above to find students and manage invoices
           </p>
           <div className="mt-6 flex flex-wrap gap-3 justify-center text-sm text-gray-400">
             <span className="px-3 py-1 bg-gray-50 rounded-full border border-gray-200">Student Name</span>
@@ -963,17 +1151,6 @@ const Billing = () => {
                             step="1"
                           />
                         </div>
-                        {/* <div className="col-span-2">
-                          <label className="block text-xs text-gray-600 mb-1">Quantity</label>
-                          <input
-                            type="number"
-                            value={item.quantity || 1}
-                            onChange={(e) => updateItem(index, 'quantity', parseInt(e.target.value) || 1)}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
-                            placeholder="1"
-                            min="1"
-                          />
-                        </div> */}
                         <div className="col-span-1">
                           <label className="block text-xs text-gray-600 mb-1">Total</label>
                           <div className="text-sm font-semibold text-gray-800 py-2 px-1">
@@ -1002,17 +1179,6 @@ const Billing = () => {
                     </div>
                   </div>
                 </div>
-
-                {/* Due Date */}
-                {/* <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Due Date</label>
-                  <input
-                    type="date"
-                    value={invoiceData.dueDate}
-                    onChange={(e) => setInvoiceData(prev => ({ ...prev, dueDate: e.target.value }))}
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div> */}
 
                 {/* Notes */}
                 <div>
@@ -1072,7 +1238,7 @@ const Billing = () => {
               </div>
               <div className="flex items-center space-x-2">
                 <button
-                  onClick={() => downloadPDF(generatedInvoice )}
+                  onClick={() => downloadPDF(generatedInvoice)}
                   disabled={isDownloading}
                   className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center gap-2 disabled:opacity-50"
                 >
@@ -1084,7 +1250,7 @@ const Billing = () => {
                   <span>{isDownloading ? 'Downloading...' : 'Download PDF'}</span>
                 </button>
                 <button
-                  onClick={() => printInvoice(generatedInvoice )}
+                  onClick={() => printInvoice(generatedInvoice)}
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2"
                 >
                   <Printer size={18} />
@@ -1103,7 +1269,7 @@ const Billing = () => {
             </div>
 
             <div className="p-8" ref={invoiceRef}>
-              {renderInvoicePreview(generatedInvoice )}
+              {generatedInvoice && renderInvoicePreview(generatedInvoice)}
             </div>
           </div>
         </div>
@@ -1115,7 +1281,7 @@ const Billing = () => {
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[80vh] overflow-y-auto">
             <div className="sticky top-0 bg-white z-10 border-b px-6 py-4 flex justify-between items-center">
               <div>
-                <h2 className="text-2xl font-bold text-gray-900">Invoices</h2>
+                <h2 className="text-2xl font-bold text-gray-900">Previous Invoices</h2>
                 <p className="text-sm text-gray-500 mt-1">
                   {selectedStudent.basicInfo?.name} ({selectedStudent.basicInfo?.admissionNo})
                 </p>
@@ -1139,7 +1305,7 @@ const Billing = () => {
                     <Receipt className="text-gray-400" size={32} />
                   </div>
                   <h4 className="text-lg font-semibold text-gray-800 mb-2">No invoices found</h4>
-                  <p className="text-gray-500">This student has no invoices yet</p>
+                  <p className="text-gray-500">This student has no previous invoices</p>
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -1154,12 +1320,6 @@ const Billing = () => {
                         </div>
                         <div className="text-right">
                           <p className="font-bold text-indigo-600">₹{invoice.total.toLocaleString()}</p>
-                          <span className={`px-2 py-1 text-xs rounded-full
-                            ${invoice.status === 'paid' ? 'bg-green-100 text-green-800' :
-                              invoice.status === 'partial' ? 'bg-amber-100 text-amber-800' :
-                              'bg-red-100 text-red-800'}`}>
-                            {invoice.status.toUpperCase()}
-                          </span>
                         </div>
                       </div>
                       <div className="mt-3 flex gap-2">
@@ -1174,25 +1334,7 @@ const Billing = () => {
                           <Eye size={14} />
                           Preview
                         </button>
-                        <button
-                          onClick={() => downloadPDF(invoice)}
-                          disabled={isDownloading}
-                          className="px-3 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center gap-1 disabled:opacity-50"
-                        >
-                          {isDownloading ? (
-                            <Loader className="animate-spin" size={14} />
-                          ) : (
-                            <Download size={14} />
-                          )}
-                          Download
-                        </button>
-                        <button
-                          onClick={() => printInvoice(invoice)}
-                          className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-1"
-                        >
-                          <Printer size={14} />
-                          Print
-                        </button>
+                        
                       </div>
                     </div>
                   ))}
