@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { LogOut, Users, UserPlus, List, BarChart3, Search, DollarSign, Award, Ticket, School, MapPin, Award as AwardIcon, Edit, X, Save, Loader, Building, Mail, Phone, Calendar, Receipt } from 'lucide-react';
+import { LogOut, Users, UserPlus, List, BarChart3, Search, DollarSign, Award, Ticket, School, MapPin, Award as AwardIcon, Edit, X, Save, Loader, Building, Mail, Phone, Calendar, Receipt, IdCardIcon } from 'lucide-react';
 import StudentList from '../Components/StudentList';
 import AllStudents from '../Components/AllStudents';
 import AddStudent from '../Components/AddStudents';
@@ -16,6 +16,7 @@ import MarksCard from '../Components/MarksCard';
 import StudentAttendance from '../Components/StudentAttendance';
 import TeachersAttendance from '../Components/TeachersAttendance';
 import Billing from '../Components/Billing';
+import IdCard from '../Components/IdCard';
 
 const Dashboard = ({ user, onLogout }) => {
   const [activeTab, setActiveTab] = useState('search');
@@ -580,13 +581,29 @@ const Dashboard = ({ user, onLogout }) => {
                 <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-amber-600"></div>
               )}
             </button>
+             <button onClick={() => setActiveTab('idcard')}
+              className={`px-3 py-4 font-medium text-sm transition-all relative whitespace-nowrap ${activeTab === 'idcard'
+                  ? 'text-amber-600'
+                  : 'text-gray-500 hover:text-gray-700'
+                }`}
+            >
+              <div className="flex items-center space-x-2">
+                <IdCardIcon size={16} />
+                <span>ID Card</span>
+              </div>
+              {activeTab === 'idcard' && (
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-amber-600"></div>
+              )}
+            </button>
           </nav>
         </div>
       </div>
 
       {/* Main Content */}
       <div className="p-6">
-        { activeTab === 'billing' ? (
+        { activeTab === 'idcard' ? (
+          <IdCard/>
+        ) : activeTab === 'billing' ? (
           <Billing/>
         ): activeTab === 'studentAttendance' ? (
           <StudentAttendance
@@ -594,7 +611,6 @@ const Dashboard = ({ user, onLogout }) => {
             onUpdateStudent={handleUpdateStudent}
             hallTicketData={studentHallTicketData}
             getHallTicketData={getHallTicketData}
-
           />
         ) : activeTab === 'teacherAttendance' ? (
           <TeachersAttendance />
@@ -607,7 +623,7 @@ const Dashboard = ({ user, onLogout }) => {
             getHallTicketData={getHallTicketData}
             onRefreshHallTickets={loadHallTicketsForStudents}
             refreshTrigger={refreshMarksCard}
-            subjectRefreshTrigger={subjectRefreshTrigger}  
+            subjectRefreshTrigger={subjectRefreshTrigger}
           />
         ) : activeTab === 'addStudent' ? (
           <AddStudent
