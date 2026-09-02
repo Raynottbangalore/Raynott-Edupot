@@ -81,32 +81,24 @@ const IdCard = () => {
   const [selectedStudentForEdit, setSelectedStudentForEdit] = useState(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editFormData, setEditFormData] = useState({});
+  const [previewScale, setPreviewScale] = useState(1);
 
   // Design templates - 3 completely different designs
   const designs = {
     design1: {
-      name: 'Classic',
+      name: 'Classic Heritage',
       icon: <Layout size={20} />,
       description: 'Traditional Indian school ID card with royal border and emblem',
-      primaryColor: 'from-indigo-700 to-indigo-900',
-      accentColor: 'from-amber-400 to-amber-600',
-      bgPattern: 'bg-pattern-1'
     },
     design2: {
-      name: 'Modern',
+      name: 'Modern Vertical',
       icon: <Star size={20} />,
-      description: 'Clean contemporary design with gradient accents and icons',
-      primaryColor: 'from-cyan-500 to-blue-600',
-      accentColor: 'from-pink-400 to-rose-500',
-      bgPattern: 'bg-pattern-2'
+      description: 'Vertical ID card with centered photo and clean layout',
     },
     design3: {
-      name: 'Premium',
+      name: 'Premium Split',
       icon: <Award size={20} />,
-      description: 'Elegant premium design with gold accents and sophisticated styling',
-      primaryColor: 'from-amber-700 to-amber-900',
-      accentColor: 'from-yellow-400 to-amber-500',
-      bgPattern: 'bg-pattern-3'
+      description: 'Split design with colored sidebar and elegant styling',
     }
   };
 
@@ -242,6 +234,7 @@ const IdCard = () => {
     setSelectedStudent(student);
     setStudentImage(null);
     setStudentImageFile(null);
+    setPreviewScale(1);
     setShowPreview(true);
   };
 
@@ -272,10 +265,10 @@ const IdCard = () => {
       const pdf = new jsPDF({
         orientation: 'portrait',
         unit: 'mm',
-        format: [85, 54]
+        format: [54, 85] // Vertical format
       });
       
-      pdf.addImage(imgData, 'PNG', 0, 0, 85, 54);
+      pdf.addImage(imgData, 'PNG', 0, 0, 54, 85);
       pdf.save(`ID-Card-${selectedStudent.basicInfo?.name || 'Student'}.pdf`);
       toast.success('ID Card downloaded successfully!');
     } catch (error) {
@@ -299,12 +292,12 @@ const IdCard = () => {
       });
 
       const cardsPerPage = 9;
-      const cardWidth = 85;
-      const cardHeight = 54;
-      const marginX = 10;
+      const cardWidth = 54;
+      const cardHeight = 85;
+      const marginX = 15;
       const marginY = 15;
-      const gapX = 5;
-      const gapY = 5;
+      const gapX = 8;
+      const gapY = 8;
 
       for (let i = 0; i < generatedCards.length; i++) {
         const index = i % cardsPerPage;
@@ -450,7 +443,7 @@ const IdCard = () => {
     printWindow.document.close();
   };
 
-  // DESIGN 1: Classic Heritage - Traditional with royal borders and emblem
+  // DESIGN 1: Classic Heritage - Light/White theme with highlighted school info
   const renderDesign1 = (student, image) => {
     const basicInfo = student.basicInfo || {};
     const name = basicInfo.name || 'Student Name';
@@ -463,121 +456,117 @@ const IdCard = () => {
     const phone = basicInfo.fatherPhone || basicInfo.motherPhone || 'N/A';
     const address = basicInfo.address || 'N/A';
     const bloodGroup = basicInfo.bloodGroup || 'N/A';
-    const religion = basicInfo.religion || 'N/A';
-    const nationality = basicInfo.nationality || 'N/A';
 
     return (
-      <div className="w-[340px] h-[220px] bg-white rounded-xl shadow-2xl border-4 border-double border-amber-600 overflow-hidden relative font-serif">
-        {/* Decorative corner patterns */}
-        <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-amber-700 rounded-tl-lg"></div>
-        <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-amber-700 rounded-tr-lg"></div>
-        <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-amber-700 rounded-bl-lg"></div>
-        <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-amber-700 rounded-br-lg"></div>
+      <div className="w-[340px] h-[220px] bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden relative" style={{ fontFamily: 'Arial, sans-serif' }}>
+        {/* Decorative corner patterns - light gray */}
+        <div className="absolute top-0 left-0 w-6 h-6 border-t-2 border-l-2 border-indigo-300 rounded-tl-lg"></div>
+        <div className="absolute top-0 right-0 w-6 h-6 border-t-2 border-r-2 border-indigo-300 rounded-tr-lg"></div>
+        <div className="absolute bottom-0 left-0 w-6 h-6 border-b-2 border-l-2 border-indigo-300 rounded-bl-lg"></div>
+        <div className="absolute bottom-0 right-0 w-6 h-6 border-b-2 border-r-2 border-indigo-300 rounded-br-lg"></div>
         
-        {/* Decorative line */}
-        <div className="absolute left-8 right-8 top-2 border-t-2 border-amber-300/50"></div>
-        <div className="absolute left-8 right-8 bottom-2 border-t-2 border-amber-300/50"></div>
+        {/* Decorative line - light gray */}
+        <div className="absolute left-6 right-6 top-1.5 border-t border-indigo-200"></div>
+        <div className="absolute left-6 right-6 bottom-1.5 border-t border-indigo-200"></div>
         
-        {/* School Name Header with Emblem */}
-        <div className="bg-gradient-to-r from-amber-700 via-amber-600 to-amber-700 px-4 py-2 text-center relative">
+        {/* School Name Header - Highlighted with bold and background */}
+        <div className="bg-gradient-to-r from-indigo-100 via-indigo-50 to-indigo-100 px-4 py-1.5 text-center relative border-b-2 border-indigo-300">
           <div className="absolute left-2 top-1/2 -translate-y-1/2">
-            <Shield size={20} className="text-yellow-300" />
+            <Shield size={16} className="text-indigo-700 font-bold" />
           </div>
           <div className="absolute right-2 top-1/2 -translate-y-1/2">
-            <Shield size={20} className="text-yellow-300" />
+            <Shield size={16} className="text-indigo-700 font-bold" />
           </div>
-          <div className="text-white font-bold text-sm tracking-wider">
+          <div className="text-indigo-900 font-extrabold text-sm tracking-wider">
             {schoolInfo.schoolName || 'SCHOOL NAME'}
           </div>
-          <div className="text-amber-200 text-[8px] font-medium tracking-widest">
+          <div className="text-indigo-700 font-bold text-[8px] tracking-widest">
             {schoolInfo.schoolAffiliation || 'EST. 1985 • GOVT. RECOGNISED'}
           </div>
         </div>
 
         {/* Content */}
-        <div className="p-3 flex gap-3">
-          {/* Photo with traditional frame */}
+        <div className="p-2.5 flex gap-3">
+          {/* Photo with light frame */}
           <div className="flex-shrink-0 relative">
             {image ? (
-              <div className="w-[75px] h-[90px] rounded border-2 border-amber-700 overflow-hidden shadow-md">
+              <div className="w-[70px] h-[85px] rounded border-2 border-indigo-300 overflow-hidden shadow-sm">
                 <img src={image} alt="Student" className="w-full h-full object-cover" />
               </div>
             ) : (
-              <div className="w-[75px] h-[90px] rounded bg-gradient-to-br from-amber-600 to-amber-800 flex items-center justify-center border-2 border-amber-700 shadow-md">
-                <span className="text-white font-bold text-3xl">
+              <div className="w-[70px] h-[85px] rounded bg-gradient-to-br from-indigo-100 to-indigo-200 flex items-center justify-center border-2 border-indigo-300 shadow-sm">
+                <span className="text-indigo-700 font-bold text-3xl">
                   {name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
                 </span>
               </div>
             )}
             {/* Blood group badge */}
-            <div className="absolute -bottom-1 -right-1 bg-red-600 text-white text-[6px] font-bold px-2 py-0.5 rounded-full border border-red-400">
+            <div className="absolute -bottom-1 -right-1 bg-rose-400 text-white text-[6px] font-bold px-2 py-0.5 rounded-full border border-rose-300">
               {bloodGroup}
             </div>
           </div>
 
-          {/* Details with traditional styling */}
+          {/* Details */}
           <div className="flex-1 min-w-0 space-y-0.5">
-            <h3 className="font-bold text-amber-900 text-base border-b border-amber-200 pb-0.5">{name}</h3>
+            <h3 className="font-bold text-gray-800 text-base border-b-2 border-indigo-200 pb-0.5">{name}</h3>
             
             <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-xs">
               <div className="flex items-baseline gap-1">
-                <span className="text-amber-700 text-[8px] font-bold uppercase tracking-wider">Father</span>
+                <span className="text-indigo-700 text-[8px] font-bold uppercase tracking-wider">Father</span>
               </div>
               <div className="flex items-baseline gap-1">
-                <span className="text-gray-800 text-[9px] font-medium">{fatherName}</span>
+                <span className="text-gray-700 text-[9px] font-medium">{fatherName}</span>
               </div>
               
               <div className="flex items-baseline gap-1">
-                <span className="text-amber-700 text-[8px] font-bold uppercase tracking-wider">Mother</span>
+                <span className="text-indigo-700 text-[8px] font-bold uppercase tracking-wider">Mother</span>
               </div>
               <div className="flex items-baseline gap-1">
-                <span className="text-gray-800 text-[9px] font-medium">{motherName}</span>
+                <span className="text-gray-700 text-[9px] font-medium">{motherName}</span>
               </div>
               
               <div className="flex items-baseline gap-1">
-                <span className="text-amber-700 text-[8px] font-bold uppercase tracking-wider">DOB</span>
+                <span className="text-indigo-700 text-[8px] font-bold uppercase tracking-wider">DOB</span>
               </div>
               <div className="flex items-baseline gap-1">
-                <span className="text-gray-800 text-[9px] font-medium">{dob}</span>
+                <span className="text-gray-700 text-[9px] font-medium">{dob}</span>
               </div>
               
               <div className="flex items-baseline gap-1">
-                <span className="text-amber-700 text-[8px] font-bold uppercase tracking-wider">Contact</span>
+                <span className="text-indigo-700 text-[8px] font-bold uppercase tracking-wider">Contact</span>
               </div>
               <div className="flex items-baseline gap-1">
-                <span className="text-gray-800 text-[9px] font-medium">{phone}</span>
-              </div>
-              
-              <div className="flex items-baseline gap-1 col-span-2">
-                <span className="text-amber-700 text-[8px] font-bold uppercase tracking-wider">Address</span>
-                <span className="text-gray-800 text-[8px] truncate">{address}</span>
+                <span className="text-gray-700 text-[9px] font-medium">{phone}</span>
               </div>
               
               <div className="flex items-baseline gap-1 col-span-2">
-                <span className="text-amber-700 text-[8px] font-bold uppercase tracking-wider">Class</span>
+                <span className="text-indigo-700 text-[8px] font-bold uppercase tracking-wider">Address</span>
+                <span className="text-gray-700 text-[8px] truncate font-medium">{address}</span>
+              </div>
+              
+              <div className="flex items-baseline gap-1 col-span-2">
+                <span className="text-indigo-700 text-[8px] font-bold uppercase tracking-wider">Class</span>
                 <span className="text-gray-800 text-[9px] font-bold">{grade} {section ? `- ${section}` : ''}</span>
-                <span className="text-amber-700 text-[8px] font-bold uppercase tracking-wider ml-2">Adm. No.</span>
+                <span className="text-indigo-700 text-[8px] font-bold uppercase tracking-wider ml-2">Adm. No.</span>
                 <span className="text-gray-800 text-[9px] font-bold">{admissionNo}</span>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Footer with seal */}
-        <div className="absolute bottom-0 left-0 right-0 px-3 py-1 flex items-center justify-between bg-amber-50 border-t-2 border-amber-300">
-          <div className="flex items-center gap-2 text-[7px] text-amber-700">
-            <BadgeCheck size={10} className="text-amber-600" />
-            <span className="font-bold">PRINCIPAL SIGNATURE</span>
+        {/* Footer - Principal Signature at bottom */}
+        {/* <div className="absolute bottom-0 left-0 right-0 px-3 py-1 flex items-center justify-between bg-gradient-to-r from-indigo-50 to-indigo-100 border-t-2 border-indigo-300">
+          <div className="flex items-center gap-2 text-[7px] text-indigo-800">
+            <BadgeCheck size={10} className="text-indigo-600" />
+            <span className="font-extrabold">PRINCIPAL SIGNATURE</span>
           </div>
-          <div className="text-[7px] text-amber-700">
-            <span className="font-bold">Valid Till: 2026</span>
-          </div>
-        </div>
+          
+        </div> */}
       </div>
     );
   };
 
-  // DESIGN 2: Modern Minimal - Clean contemporary with gradient accents
+  // DESIGN 2: Modern Vertical - With highlighted school info
   const renderDesign2 = (student, image) => {
     const basicInfo = student.basicInfo || {};
     const name = basicInfo.name || 'Student Name';
@@ -591,241 +580,186 @@ const IdCard = () => {
     const address = basicInfo.address || 'N/A';
     const bloodGroup = basicInfo.bloodGroup || 'N/A';
 
-    // return (
-    //   <div className="w-[340px] h-[220px] bg-white rounded-2xl shadow-2xl border-0 overflow-hidden relative font-sans">
-    //     {/* Modern gradient background overlay */}
-    //     <div className="absolute inset-0 bg-gradient-to-br from-cyan-50 via-blue-50 to-indigo-50 opacity-50"></div>
+    return (
+      <div className="w-[200px] h-[320px] bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden relative font-sans flex flex-col">
+        {/* Top gradient bar */}
+        <div className="h-1.5 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500"></div>
         
-    //     {/* Top accent gradient bar */}
-    //     <div className="h-2 bg-gradient-to-r from-cyan-400 via-blue-500 to-indigo-600"></div>
-        
-    //     {/* School Name with modern design */}
-    //     <div className="px-5 pt-3 pb-1 flex items-center justify-between">
-    //       <div>
-    //         <div className="text-xs font-bold text-blue-600 tracking-wider flex items-center gap-1">
-    //           <GraduationCap size={12} className="text-blue-600" />
-    //           {schoolInfo.schoolName || 'SCHOOL NAME'}
-    //         </div>
-    //         <div className="text-[7px] text-gray-400 font-medium tracking-wide">
-    //           {schoolInfo.schoolAffiliation || 'MODERN EDUCATION SYSTEM'}
-    //         </div>
-    //       </div>
-    //       <div className="flex items-center gap-1">
-    //         <div className="w-6 h-6 bg-gradient-to-br from-cyan-400 to-blue-500 rounded-full flex items-center justify-center">
-    //           <Star size={10} className="text-white" />
-    //         </div>
-    //       </div>
-    //     </div>
+        {/* School Header - Highlighted with bold and gradient background */}
+        <div className="px-3 pt-3 pb-2 text-center bg-gradient-to-r from-indigo-100 via-purple-100 to-pink-100 border-b-2 border-indigo-300">
+          <div className="text-[10px] font-extrabold text-indigo-900 uppercase tracking-wider">
+            {schoolInfo.schoolName || 'SCHOOL NAME'}
+          </div>
+          <div className="text-[6px] font-bold text-indigo-700 uppercase tracking-widest mt-0.5">
+            {schoolInfo.schoolAffiliation || 'EDUCATION FOR ALL'}
+          </div>
+        </div>
 
-    //     {/* Content */}
-    //     <div className="px-4 py-1 flex gap-3">
-    //       {/* Photo with modern frame */}
-    //       <div className="flex-shrink-0 relative">
-    //         {image ? (
-    //           <div className="w-[70px] h-[85px] rounded-xl border-2 border-white shadow-lg overflow-hidden">
-    //             <img src={image} alt="Student" className="w-full h-full object-cover" />
-    //           </div>
-    //         ) : (
-    //           <div className="w-[70px] h-[85px] rounded-xl bg-gradient-to-br from-cyan-400 to-blue-500 flex items-center justify-center border-2 border-white shadow-lg">
-    //             <span className="text-white font-bold text-2xl">
-    //               {name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
-    //             </span>
-    //           </div>
-    //         )}
-    //         {/* Blood group chip */}
-    //         <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-gradient-to-r from-pink-400 to-rose-500 text-white text-[6px] font-bold px-2 py-0.5 rounded-full shadow-md">
-    //           {bloodGroup}
-    //         </div>
-    //       </div>
-
-    //       {/* Details with modern styling */}
-    //       <div className="flex-1 min-w-0">
-    //         <div className="flex items-center justify-between">
-    //           <h3 className="font-bold text-gray-800 text-sm">{name}</h3>
-    //           <span className="text-[7px] bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full font-bold">
-    //             #{admissionNo}
-    //           </span>
-    //         </div>
+        {/* Photo - Centered */}
+        <div className="flex justify-center pt-2 pb-1">
+          <div className="relative">
+            {image ? (
+              <div className="w-[75px] h-[95px] rounded-xl border-2 border-indigo-300 overflow-hidden shadow-sm bg-white">
+                <img src={image} alt="Student" className="w-full h-full object-cover" />
+              </div>
+            ) : (
+              <div className="w-[75px] h-[95px] rounded-xl bg-gradient-to-br from-indigo-100 to-purple-100 flex items-center justify-center border-2 border-indigo-300 shadow-sm">
+                <span className="text-indigo-700 font-bold text-2xl">
+                  {name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+                </span>
+              </div>
+            )}
             
-    //         <div className="space-y-0.5 mt-1">
-    //           <div className="flex items-center gap-1 text-[8px]">
-    //             <User size={10} className="text-cyan-500" />
-    //             <span className="text-gray-500">Father:</span>
-    //             <span className="text-gray-700 font-medium">{fatherName}</span>
-    //           </div>
-              
-    //           <div className="flex items-center gap-1 text-[8px]">
-    //             <User size={10} className="text-pink-500" />
-    //             <span className="text-gray-500">Mother:</span>
-    //             <span className="text-gray-700 font-medium">{motherName}</span>
-    //           </div>
-              
-    //           <div className="flex items-center gap-1 text-[8px]">
-    //             <Calendar size={10} className="text-blue-500" />
-    //             <span className="text-gray-500">DOB:</span>
-    //             <span className="text-gray-700 font-medium">{dob}</span>
-    //           </div>
-              
-    //           <div className="flex items-center gap-1 text-[8px]">
-    //             <Phone size={10} className="text-green-500" />
-    //             <span className="text-gray-500">Contact:</span>
-    //             <span className="text-gray-700 font-medium">{phone}</span>
-    //           </div>
-              
-    //           <div className="flex items-center gap-1 text-[8px]">
-    //             <MapPin size={10} className="text-amber-500" />
-    //             <span className="text-gray-500">Class:</span>
-    //             <span className="text-gray-700 font-bold">{grade} {section ? `- ${section}` : ''}</span>
-    //           </div>
-    //         </div>
-    //       </div>
-    //     </div>
+          </div>
+        </div>
 
-    //     {/* Footer with modern design */}
-    //     <div className="absolute bottom-0 left-0 right-0 px-4 py-1.5 flex items-center justify-between bg-gradient-to-r from-cyan-50 to-blue-50 border-t border-blue-100">
-    //       <div className="flex items-center gap-2 text-[7px] text-gray-500">
-    //         <QrCode size={12} className="text-blue-500" />
-    //         <span>ID: {admissionNo}</span>
-    //       </div>
-    //       <div className="text-[7px] text-gray-500 flex items-center gap-2">
-    //         <span className="font-bold text-blue-600">Principal</span>
-    //         <span className="w-12 h-[2px] bg-gradient-to-r from-cyan-400 to-blue-500"></span>
-    //       </div>
-    //     </div>
-    //   </div>
-    // );
+        {/* Student Name */}
+        <div className="text-center mt-1">
+          <h3 className="font-bold text-gray-800 text-sm leading-tight">{name}</h3>
+          <div className="text-[7px] text-indigo-600 font-bold">#{admissionNo}</div>
+        </div>
+
+        {/* Details in compact grid */}
+        <div className="px-3 py-1.5 flex-1">
+          <div className="space-y-0.5 text-[8px]">
+            <div className="flex justify-between border-b border-indigo-100 pb-0.5">
+              <span className="text-indigo-700 font-bold">Father</span>
+              <span className="text-gray-700 font-medium truncate max-w-[90px]">{fatherName}</span>
+            </div>
+            <div className="flex justify-between border-b border-indigo-100 pb-0.5">
+              <span className="text-indigo-700 font-bold">Mother</span>
+              <span className="text-gray-700 font-medium truncate max-w-[90px]">{motherName}</span>
+            </div>
+            <div className="flex justify-between border-b border-indigo-100 pb-0.5">
+              <span className="text-indigo-700 font-bold">DOB</span>
+              <span className="text-gray-700 font-medium">{dob}</span>
+            </div>
+            <div className="flex justify-between border-b border-indigo-100 pb-0.5">
+              <span className="text-indigo-700 font-bold">Class</span>
+              <span className="text-gray-800 font-bold">{grade} {section ? `- ${section}` : ''}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-indigo-700 font-bold">Contact</span>
+              <span className="text-gray-700 font-medium">{phone}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer - Principal Signature at bottom */}
+        {/* <div className="mt-auto border-t-2 border-indigo-300 px-3 py-1.5 flex items-center justify-between bg-gradient-to-r from-indigo-50 to-purple-50">
+          <div className="text-[7px] text-indigo-800 flex items-center gap-1">
+            <BadgeCheck size={10} className="text-indigo-600" />
+            <span className="font-extrabold">PRINCIPAL</span>
+          </div>
+          <div className="text-[6px] text-indigo-600 font-bold">
+            <span>{admissionNo}</span>
+          </div>
+        </div> */}
+      </div>
+    );
   };
 
-  // DESIGN 3: Premium Luxury - Elegant with gold accents
+  // DESIGN 3: Premium Split - Vertical text from bottom to top, highlighted school info
   const renderDesign3 = (student, image) => {
-    const basicInfo = student.basicInfo || {};
-    const name = basicInfo.name || 'Student Name';
-    const admissionNo = basicInfo.admissionNo || 'N/A';
-    const grade = basicInfo.grade || 'N/A';
-    const section = basicInfo.section || 'N/A';
-    const fatherName = basicInfo.fatherName || 'N/A';
-    const motherName = basicInfo.motherName || 'N/A';
-    const dob = basicInfo.dob || 'N/A';
-    const phone = basicInfo.fatherPhone || basicInfo.motherPhone || 'N/A';
-    const address = basicInfo.address || 'N/A';
-    const bloodGroup = basicInfo.bloodGroup || 'N/A';
+  const basicInfo = student.basicInfo || {};
 
-    // return (
-    //   <div className="w-[340px] h-[220px] bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 rounded-xl shadow-2xl border border-amber-400/30 overflow-hidden relative font-serif">
-    //     {/* Gold decorative background pattern */}
-    //     <div className="absolute inset-0 opacity-5">
-    //       <div className="w-full h-full" style={{
-    //         backgroundImage: 'radial-gradient(circle at 20% 50%, #ffd700 1px, transparent 1px)',
-    //         backgroundSize: '30px 30px'
-    //       }}></div>
-    //     </div>
+  const name = basicInfo.name || 'Student Name';
+  const grade = basicInfo.grade || 'Class';
+  const section = basicInfo.section || 'Section';
+  const admissionNo = basicInfo.admissionNo || 'N/A';
+  const phone = basicInfo.fatherPhone || basicInfo.motherPhone || 'N/A';
+  const dob = basicInfo.dob || 'N/A';
+
+  return (
+    <div
+      className="w-[200px] h-[320px] bg-white border border-black overflow-hidden flex"
+      style={{
+        fontFamily: 'Arial, sans-serif',
+      }}
+    >
+      {/* LEFT SIDEBAR - With Background Color */}
+      <div
+        className="w-[55px] h-full flex-shrink-0 flex items-center justify-center border-r border-black"
+        style={{
+          background: 'linear-gradient(180deg, #1a1a2e, #16213e, #0f3460)',
+        }}
+      >
+        <div
+          className="flex flex-col items-center justify-center text-white"
+          style={{
+            writingMode: 'vertical-rl',
+            transform: 'rotate(180deg)',
+            whiteSpace: 'nowrap',
+            lineHeight: '1.5',
+          }}
+        >
+          {/* School Name - Highlighted with larger font and bold */}
+          <span className="font-black text-[13px] tracking-wider">
+            {schoolInfo.schoolName || 'ABC SCHOOL'}
+          </span>
+
+          {/* Address, Contact, Email in straight line with " || " */}
+          <span className="text-[7px] opacity-80 mt-1">
+            {schoolInfo.schoolAddress || 'Address'} 
+            {' || '}
+            {schoolInfo.schoolPhone || 'Phone'} 
+            {' || '}
+            {schoolInfo.schoolEmail || 'Email'}
+          </span>
+        </div>
+      </div>
+
+      {/* RIGHT CONTENT - Centered */}
+      <div className="flex-1 flex flex-col items-center justify-center bg-white px-2">
         
-    //     {/* Gold corner accents */}
-    //     <div className="absolute top-2 left-2 w-6 h-6 border-t-2 border-l-2 border-amber-400/60"></div>
-    //     <div className="absolute top-2 right-2 w-6 h-6 border-t-2 border-r-2 border-amber-400/60"></div>
-    //     <div className="absolute bottom-2 left-2 w-6 h-6 border-b-2 border-l-2 border-amber-400/60"></div>
-    //     <div className="absolute bottom-2 right-2 w-6 h-6 border-b-2 border-r-2 border-amber-400/60"></div>
-        
-    //     {/* Gold shimmer line */}
-    //     <div className="absolute left-6 right-6 top-0 h-[1px] bg-gradient-to-r from-transparent via-amber-400 to-transparent"></div>
-    //     <div className="absolute left-6 right-6 bottom-0 h-[1px] bg-gradient-to-r from-transparent via-amber-400 to-transparent"></div>
+        {/* STUDENT IMAGE - Centered */}
+        <div className="w-[70px] h-[85px] border border-black overflow-hidden">
+          {image ? (
+            <img
+              src={image}
+              alt="Student"
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-[10px] text-gray-500">
+              Image
+            </div>
+          )}
+        </div>
 
-    //     {/* School Name with premium styling */}
-    //     <div className="px-5 pt-3 pb-1 text-center">
-    //       <div className="flex items-center justify-center gap-2">
-    //         <Award size={14} className="text-amber-400" />
-    //         <div className="text-amber-400 font-bold text-xs tracking-[0.3em] uppercase">
-    //           {schoolInfo.schoolName || 'SCHOOL NAME'}
-    //         </div>
-    //         <Award size={14} className="text-amber-400" />
-    //       </div>
-    //       <div className="text-amber-500/60 text-[7px] font-medium tracking-widest mt-0.5">
-    //         {schoolInfo.schoolAffiliation || 'PREMIUM INSTITUTION • EST. 1990'}
-    //       </div>
-    //     </div>
+        {/* STUDENT DETAILS - Centered, No Labels */}
+        <div className="mt-[12px] text-center space-y-[3px]">
+          
+          {/* Name */}
+          <div className="text-[11px] font-bold text-black">
+            {name}
+          </div>
 
-    //     {/* Gold divider */}
-    //     <div className="mx-5 h-px bg-gradient-to-r from-transparent via-amber-400/50 to-transparent my-1"></div>
+          {/* Class - Section */}
+          <div className="text-[10px] text-gray-800">
+            {grade} {section ? `- ${section}` : ''}
+          </div>
 
-    //     {/* Content */}
-    //     <div className="px-4 py-1 flex gap-3">
-    //       {/* Photo with premium frame */}
-    //       <div className="flex-shrink-0 relative">
-    //         {image ? (
-    //           <div className="w-[70px] h-[85px] rounded-lg border-2 border-amber-400/60 overflow-hidden shadow-lg shadow-amber-400/20">
-    //             <img src={image} alt="Student" className="w-full h-full object-cover" />
-    //           </div>
-    //         ) : (
-    //           <div className="w-[70px] h-[85px] rounded-lg bg-gradient-to-br from-amber-600 to-amber-800 flex items-center justify-center border-2 border-amber-400/60 shadow-lg shadow-amber-400/20">
-    //             <span className="text-white font-bold text-2xl">
-    //               {name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
-    //             </span>
-    //           </div>
-    //         )}
-    //         {/* Premium badge */}
-    //         <div className="absolute -top-1 -right-1">
-    //           <div className="bg-gradient-to-r from-amber-400 to-yellow-500 text-gray-900 text-[5px] font-bold px-1.5 py-0.5 rounded-full shadow-lg flex items-center gap-0.5">
-    //             <Star size={6} className="fill-gray-900" />
-    //             PREMIUM
-    //           </div>
-    //         </div>
-    //         {/* Blood group */}
-    //         <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-gray-800 border border-amber-400/30 text-amber-400 text-[6px] font-bold px-2 py-0.5 rounded-full">
-    //           {bloodGroup}
-    //         </div>
-    //       </div>
+          {/* Phone */}
+          <div className="text-[9px] text-gray-700">
+            {phone}
+          </div>
 
-    //       {/* Details with premium styling */}
-    //       <div className="flex-1 min-w-0">
-    //         <div className="flex items-center justify-between">
-    //           <h3 className="font-bold text-amber-400 text-sm tracking-wide">{name}</h3>
-    //           <Fingerprint size={12} className="text-amber-400/60" />
-    //         </div>
-            
-    //         <div className="space-y-0.5 mt-1">
-    //           <div className="flex items-center gap-1 text-[8px]">
-    //             <span className="text-amber-500/70 w-8 font-bold text-[7px] tracking-wider">FATHER</span>
-    //             <span className="text-gray-300 font-medium">{fatherName}</span>
-    //           </div>
-              
-    //           <div className="flex items-center gap-1 text-[8px]">
-    //             <span className="text-amber-500/70 w-8 font-bold text-[7px] tracking-wider">MOTHER</span>
-    //             <span className="text-gray-300 font-medium">{motherName}</span>
-    //           </div>
-              
-    //           <div className="flex items-center gap-1 text-[8px]">
-    //             <span className="text-amber-500/70 w-8 font-bold text-[7px] tracking-wider">DOB</span>
-    //             <span className="text-gray-300 font-medium">{dob}</span>
-    //           </div>
-              
-    //           <div className="flex items-center gap-1 text-[8px]">
-    //             <span className="text-amber-500/70 w-8 font-bold text-[7px] tracking-wider">CONTACT</span>
-    //             <span className="text-gray-300 font-medium">{phone}</span>
-    //           </div>
-              
-    //           <div className="flex items-center gap-1 text-[8px]">
-    //             <span className="text-amber-500/70 w-8 font-bold text-[7px] tracking-wider">CLASS</span>
-    //             <span className="text-amber-400 font-bold">{grade} {section ? `- ${section}` : ''}</span>
-    //             <span className="text-amber-500/50 ml-1 text-[6px]">ID: {admissionNo}</span>
-    //           </div>
-    //         </div>
-    //       </div>
-    //     </div>
+          {/* DOB */}
+          <div className="text-[9px] text-gray-700">
+            {dob}
+          </div>
 
-    //     {/* Footer with premium design */}
-    //     <div className="absolute bottom-0 left-0 right-0 px-4 py-1 flex items-center justify-between bg-gradient-to-r from-transparent via-amber-400/10 to-transparent border-t border-amber-400/20">
-    //       <div className="flex items-center gap-2 text-[6px] text-amber-500/60">
-    //         <BadgeCheck size={10} className="text-amber-400" />
-    //         <span className="tracking-wider">PRINCIPAL SIGNATURE</span>
-    //       </div>
-    //       <div className="text-[6px] text-amber-500/60 tracking-wider">
-    //         <span>MEMBER • 2025-26</span>
-    //       </div>
-    //     </div>
-    //   </div>
-    // );
-  };
+          {/* Admission No */}
+          <div className="text-[8px] text-gray-500 mt-1">
+            ID: {admissionNo}
+          </div>
 
+        </div>
+      </div>
+    </div>
+  );
+};
   // Main render function
   const renderIdCard = (student, image) => {
     if (!student) return null;
@@ -864,8 +798,6 @@ const IdCard = () => {
   // Handle save edit
   const handleSaveEdit = async () => {
     try {
-      // Here you would call your API to update the student
-      // For now, we'll just update locally
       const updatedStudents = students.map(s => {
         if (s.studentId === selectedStudentForEdit.studentId) {
           return {
@@ -1058,7 +990,6 @@ const IdCard = () => {
                             </div>
                             <div>
                               <div className="font-medium text-gray-900">{student.basicInfo?.name || 'Unnamed'}</div>
-                              <div className="text-xs text-gray-500">{student.basicInfo?.email || 'No email'}</div>
                             </div>
                           </div>
                         </td>
@@ -1085,9 +1016,7 @@ const IdCard = () => {
                             </button>
                             <button
                               onClick={() => {
-                                // Handle delete
                                 if (window.confirm('Are you sure you want to delete this student?')) {
-                                  // Delete logic here
                                   toast.info('Delete functionality will be implemented');
                                 }
                               }}
@@ -1130,7 +1059,7 @@ const IdCard = () => {
       {/* Single ID Card Preview Modal */}
       {showPreview && selectedStudent && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[9999] p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-white z-10 border-b px-6 py-4 flex justify-between items-center">
               <div>
                 <h2 className="text-lg font-bold text-gray-900">ID Card Preview</h2>
@@ -1151,7 +1080,7 @@ const IdCard = () => {
 
             <div className="p-6 flex flex-col items-center">
               {/* Image Upload Button */}
-              <div className="mb-4 w-full">
+              <div className="mb-4 w-full max-w-md">
                 <div className="flex items-center justify-between bg-gray-50 rounded-lg p-3 border border-gray-200">
                   <div className="flex items-center gap-2">
                     <Camera size={16} className="text-indigo-600" />
@@ -1192,11 +1121,42 @@ const IdCard = () => {
               </div>
 
               {/* Card Preview */}
-              <div ref={cardRef}>
-                {renderIdCard(selectedStudent, studentImage)}
+              <div className="flex justify-center items-center p-4 bg-gray-50 rounded-xl border border-gray-200 w-full overflow-auto">
+                <div 
+                  ref={cardRef}
+                  className="transform transition-transform duration-200"
+                  style={{ transform: `scale(${previewScale})` }}
+                >
+                  {renderIdCard(selectedStudent, studentImage)}
+                </div>
+              </div>
+
+              {/* Zoom Controls */}
+              <div className="flex items-center gap-2 mt-4">
+                <button
+                  onClick={() => setPreviewScale(prev => Math.max(0.5, prev - 0.1))}
+                  className="p-1.5 bg-gray-100 rounded hover:bg-gray-200 text-sm"
+                >
+                  -
+                </button>
+                <span className="text-sm text-gray-600 min-w-[60px] text-center">
+                  {Math.round(previewScale * 100)}%
+                </span>
+                <button
+                  onClick={() => setPreviewScale(prev => Math.min(2, prev + 0.1))}
+                  className="p-1.5 bg-gray-100 rounded hover:bg-gray-200 text-sm"
+                >
+                  +
+                </button>
+                <button
+                  onClick={() => setPreviewScale(1)}
+                  className="p-1.5 bg-indigo-100 text-indigo-600 rounded hover:bg-indigo-200 text-sm px-3"
+                >
+                  Reset
+                </button>
               </div>
               
-              <div className="flex gap-3 mt-6 w-full">
+              <div className="flex gap-3 mt-6 w-full max-w-md">
                 <button
                   onClick={downloadSinglePDF}
                   disabled={isGenerating}
@@ -1262,8 +1222,10 @@ const IdCard = () => {
             </div>
 
             <div className="p-6 flex flex-col items-center">
-              <div ref={cardRef}>
-                {renderIdCard(generatedCards[currentCardIndex], null)}
+              <div className="flex justify-center items-center p-4 bg-gray-50 rounded-xl border border-gray-200 w-full overflow-auto">
+                <div ref={cardRef}>
+                  {renderIdCard(generatedCards[currentCardIndex], null)}
+                </div>
               </div>
               
               <div className="w-full max-w-md mt-4">
