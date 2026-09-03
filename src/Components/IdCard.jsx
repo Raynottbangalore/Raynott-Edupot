@@ -1,47 +1,10 @@
 // src/Components/IdCard.jsx
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-  Search, 
-  Download, 
-  Printer, 
-  X, 
-  Loader, 
-  Users,
-  User,
-  School,
-  MapPin,
-  Phone,
-  Mail,
-  Calendar,
-  UserCheck,
-  FileText,
-  Eye,
-  RefreshCw,
-  ChevronLeft,
-  ChevronRight,
-  Camera,
-  Upload,
-  Palette,
-  Layout,
-  Star,
-  Award,
-  BookOpen,
-  GraduationCap,
-  Shield,
-  CreditCard,
-  Fingerprint,
-  BadgeCheck,
-  QrCode,
-  Heart,
-  Home,
-  User2,
-  Building2,
-  Hash,
-  Edit,
-  Trash2,
-  CheckCircle,
-  Clock,
-  MoreVertical
+  Search, Download, Printer,X,Loader,Users,User,School,MapPin,Phone,Mail,
+  Calendar,UserCheck,FileText,Eye,RefreshCw,ChevronLeft,ChevronRight,Camera,
+  Upload,Palette,Layout,Star,Award,BookOpen,GraduationCap,Shield,CreditCard,
+  Fingerprint,BadgeCheck,QrCode,Heart,Home,User2,Building2,Hash,Edit,Trash2,CheckCircle,Clock,MoreVertical
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import StudentApi from '../service/StudentApi';
@@ -82,6 +45,7 @@ const IdCard = () => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [editFormData, setEditFormData] = useState({});
   const [previewScale, setPreviewScale] = useState(1);
+  const [isUploading, setIsUploading] = useState(false);
 
   // Design templates - 3 completely different designs
   const designs = {
@@ -128,7 +92,10 @@ const IdCard = () => {
         const normalized = result.students.map(stu => ({
           ...stu,
           id: stu.studentId,
-          basicInfo: stu.basicInfo || {}
+          basicInfo: {
+            ...stu.basicInfo,
+            photoUrl: stu.basicInfo?.photoUrl || null
+          }
         }));
         setStudents(normalized);
         console.log('✅ Loaded students:', normalized.length);
@@ -214,25 +181,113 @@ const IdCard = () => {
   const grades = [...new Set(students.map(s => s.basicInfo?.grade).filter(Boolean))].sort();
   const sections = [...new Set(students.map(s => s.basicInfo?.section).filter(Boolean))].sort();
 
-  // Handle image upload
-  const handleImageUpload = (event) => {
-    const file = event.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setStudentImage(e.target.result);
-        setStudentImageFile(file);
-        setShowImageUpload(false);
-        toast.success('Image uploaded successfully!');
-      };
-      reader.readAsDataURL(file);
+  const uploadPhotoToServer = async (studentId, file) => {
+    try {
+      const result = await StudentApi.uploadStudentPhoto(studentId, file);
+      if (result.success) {
+        toast.success('Photo uploaded successfully!');
+        return result.photoUrl;
+      } else {
+        toast.error(result.error || 'Failed to upload photo');
+        return null;
+      }
+    } catch (error) {
+      console.error('Upload error:', error);
+      toast.error('Failed to upload photo');
+      return null;
     }
   };
+
+  
+  const handleImageUploadWithServer = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image size must be less than 5MB');
+      return;
+    }
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast.error('Only image files are allowed');
+      return;
+    }
+
+    setIsUploading(true);
+
+    // Show local preview immediately
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      setStudentImage(e.target.result);
+      setStudentImageFile(file);
+    };
+    reader.readAsDataURL(file);
+
+    // Upload to server
+    if (selectedStudent) {
+      const photoUrl = await uploadPhotoToServer(selectedStudent.studentId, file);
+      if (photoUrl) {
+        // Update student in the list with new photo URL
+        setStudents(prev => prev.map(s => 
+          s.studentId === selectedStudent.studentId 
+            ? { ...s, basicInfo: { ...s.basicInfo, photoUrl: photoUrl } }
+            : s
+        ));
+        // Update selected student
+        setSelectedStudent(prev => ({
+          ...prev,
+          basicInfo: { ...prev.basicInfo, photoUrl: photoUrl }
+        }));
+      }
+    }
+    setIsUploading(false);
+  };
+
+  
+  const deleteStudentPhoto = async () => {
+    if (!selectedStudent) return;
+    
+    if (!window.confirm('Are you sure you want to delete this photo?')) return;
+    
+    try {
+      const result = await StudentApi.deleteStudentPhoto(selectedStudent.studentId);
+      if (result.success) {
+        setStudentImage(null);
+        setStudentImageFile(null);
+        toast.success('Photo deleted successfully');
+        
+        // Update student in the list
+        setStudents(prev => prev.map(s => 
+          s.studentId === selectedStudent.studentId 
+            ? { ...s, basicInfo: { ...s.basicInfo, photoUrl: null } }
+            : s
+        ));
+        // Update selected student
+        setSelectedStudent(prev => ({
+          ...prev,
+          basicInfo: { ...prev.basicInfo, photoUrl: null }
+        }));
+      } else {
+        toast.error(result.error || 'Failed to delete photo');
+      }
+    } catch (error) {
+      console.error('Delete error:', error);
+      toast.error('Failed to delete photo');
+    }
+  };
+
 
   // Generate single ID card
   const generateSingleCard = (student) => {
     setSelectedStudent(student);
-    setStudentImage(null);
+    // Load existing photo if available
+    if (student.basicInfo?.photoUrl) {
+      setStudentImage(student.basicInfo.photoUrl);
+    } else {
+      setStudentImage(null);
+    }
     setStudentImageFile(null);
     setPreviewScale(1);
     setShowPreview(true);
@@ -500,8 +555,8 @@ const IdCard = () => {
                 </span>
               </div>
             )}
-            {/* Blood group badge */}
-            <div className="absolute -bottom-1 -right-1 bg-rose-400 text-white text-[6px] font-bold px-2 py-0.5 rounded-full border border-rose-300">
+            {/* Blood Group Badge */}
+            <div className="absolute -bottom-1 -right-1 bg-red-500 text-white text-[6px] font-bold px-1.5 py-0.5 rounded-full">
               {bloodGroup}
             </div>
           </div>
@@ -553,15 +608,6 @@ const IdCard = () => {
             </div>
           </div>
         </div>
-
-        {/* Footer - Principal Signature at bottom */}
-        {/* <div className="absolute bottom-0 left-0 right-0 px-3 py-1 flex items-center justify-between bg-gradient-to-r from-indigo-50 to-indigo-100 border-t-2 border-indigo-300">
-          <div className="flex items-center gap-2 text-[7px] text-indigo-800">
-            <BadgeCheck size={10} className="text-indigo-600" />
-            <span className="font-extrabold">PRINCIPAL SIGNATURE</span>
-          </div>
-          
-        </div> */}
       </div>
     );
   };
@@ -609,7 +655,10 @@ const IdCard = () => {
                 </span>
               </div>
             )}
-            
+            {/* Blood Group Badge */}
+            <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-red-500 text-white text-[6px] font-bold px-1.5 py-0.5 rounded-full">
+              {bloodGroup}
+            </div>
           </div>
         </div>
 
@@ -644,122 +693,121 @@ const IdCard = () => {
             </div>
           </div>
         </div>
-
-        {/* Footer - Principal Signature at bottom */}
-        {/* <div className="mt-auto border-t-2 border-indigo-300 px-3 py-1.5 flex items-center justify-between bg-gradient-to-r from-indigo-50 to-purple-50">
-          <div className="text-[7px] text-indigo-800 flex items-center gap-1">
-            <BadgeCheck size={10} className="text-indigo-600" />
-            <span className="font-extrabold">PRINCIPAL</span>
-          </div>
-          <div className="text-[6px] text-indigo-600 font-bold">
-            <span>{admissionNo}</span>
-          </div>
-        </div> */}
       </div>
     );
   };
 
   // DESIGN 3: Premium Split - Vertical text from bottom to top, highlighted school info
   const renderDesign3 = (student, image) => {
-  const basicInfo = student.basicInfo || {};
+    const basicInfo = student.basicInfo || {};
 
-  const name = basicInfo.name || 'Student Name';
-  const grade = basicInfo.grade || 'Class';
-  const section = basicInfo.section || 'Section';
-  const admissionNo = basicInfo.admissionNo || 'N/A';
-  const phone = basicInfo.fatherPhone || basicInfo.motherPhone || 'N/A';
-  const dob = basicInfo.dob || 'N/A';
+    const name = basicInfo.name || 'Student Name';
+    const grade = basicInfo.grade || 'Class';
+    const section = basicInfo.section || 'Section';
+    const admissionNo = basicInfo.admissionNo || 'N/A';
+    const phone = basicInfo.fatherPhone || basicInfo.motherPhone || 'N/A';
+    const dob = basicInfo.dob || 'N/A';
+    const bloodGroup = basicInfo.bloodGroup || 'N/A';
 
-  return (
-    <div
-      className="w-[200px] h-[320px] bg-white border border-black overflow-hidden flex"
-      style={{
-        fontFamily: 'Arial, sans-serif',
-      }}
-    >
-      {/* LEFT SIDEBAR - With Background Color */}
+    return (
       <div
-        className="w-[55px] h-full flex-shrink-0 flex items-center justify-center border-r border-black"
+        className="w-[200px] h-[320px] bg-white border border-black overflow-hidden flex"
         style={{
-          background: 'linear-gradient(180deg, #1a1a2e, #16213e, #0f3460)',
+          fontFamily: 'Arial, sans-serif',
         }}
       >
+        {/* LEFT SIDEBAR - With Background Color */}
         <div
-          className="flex flex-col items-center justify-center text-white"
+          className="w-[55px] h-full flex-shrink-0 flex items-center justify-center border-r border-black"
           style={{
-            writingMode: 'vertical-rl',
-            transform: 'rotate(180deg)',
-            whiteSpace: 'nowrap',
-            lineHeight: '1.5',
+            background: 'linear-gradient(180deg, #1a1a2e, #16213e, #0f3460)',
           }}
         >
-          {/* School Name - Highlighted with larger font and bold */}
-          <span className="font-black text-[13px] tracking-wider">
-            {schoolInfo.schoolName || 'ABC SCHOOL'}
-          </span>
+          <div
+            className="flex flex-col items-center justify-center text-white"
+            style={{
+              writingMode: 'vertical-rl',
+              transform: 'rotate(180deg)',
+              whiteSpace: 'nowrap',
+              lineHeight: '1.5',
+            }}
+          >
+            {/* School Name - Highlighted with larger font and bold */}
+            <span className="font-black text-[13px] tracking-wider">
+              {schoolInfo.schoolName || 'ABC SCHOOL'}
+            </span>
 
-          {/* Address, Contact, Email in straight line with " || " */}
-          <span className="text-[7px] opacity-80 mt-1">
-            {schoolInfo.schoolAddress || 'Address'} 
-            {' || '}
-            {schoolInfo.schoolPhone || 'Phone'} 
-            {' || '}
-            {schoolInfo.schoolEmail || 'Email'}
-          </span>
-        </div>
-      </div>
-
-      {/* RIGHT CONTENT - Centered */}
-      <div className="flex-1 flex flex-col items-center justify-center bg-white px-2">
-        
-        {/* STUDENT IMAGE - Centered */}
-        <div className="w-[70px] h-[85px] border border-black overflow-hidden">
-          {image ? (
-            <img
-              src={image}
-              alt="Student"
-              className="w-full h-full object-cover"
-            />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center text-[10px] text-gray-500">
-              Image
-            </div>
-          )}
+            {/* Address, Contact, Email in straight line with " || " */}
+            <span className="text-[7px] opacity-80 mt-1">
+              {schoolInfo.schoolAddress || 'Address'} 
+              {' || '}
+              {schoolInfo.schoolPhone || 'Phone'} 
+              {' || '}
+              {schoolInfo.schoolEmail || 'Email'}
+            </span>
+          </div>
         </div>
 
-        {/* STUDENT DETAILS - Centered, No Labels */}
-        <div className="mt-[12px] text-center space-y-[3px]">
+        {/* RIGHT CONTENT - Centered */}
+        <div className="flex-1 flex flex-col items-center justify-center bg-white px-2">
           
-          {/* Name */}
-          <div className="text-[11px] font-bold text-black">
-            {name}
+          {/* STUDENT IMAGE - Centered */}
+          <div className="relative">
+            <div className="w-[70px] h-[85px] border border-black overflow-hidden">
+              {image ? (
+                <img
+                  src={image}
+                  alt="Student"
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-[10px] text-gray-500">
+                  Image
+                </div>
+              )}
+            </div>
+            {/* Blood Group Badge */}
+            {bloodGroup && bloodGroup !== 'N/A' && (
+              <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-red-500 text-white text-[6px] font-bold px-1.5 py-0.5 rounded-full">
+                {bloodGroup}
+              </div>
+            )}
           </div>
 
-          {/* Class - Section */}
-          <div className="text-[10px] text-gray-800">
-            {grade} {section ? `- ${section}` : ''}
-          </div>
+          {/* STUDENT DETAILS - Centered, No Labels */}
+          <div className="mt-[12px] text-center space-y-[3px]">
+            
+            {/* Name */}
+            <div className="text-[11px] font-bold text-black">
+              {name}
+            </div>
 
-          {/* Phone */}
-          <div className="text-[9px] text-gray-700">
-            {phone}
-          </div>
+            {/* Class - Section */}
+            <div className="text-[10px] text-gray-800">
+              {grade} {section ? `- ${section}` : ''}
+            </div>
 
-          {/* DOB */}
-          <div className="text-[9px] text-gray-700">
-            {dob}
-          </div>
+            {/* Phone */}
+            <div className="text-[9px] text-gray-700">
+              {phone}
+            </div>
 
-          {/* Admission No */}
-          <div className="text-[8px] text-gray-500 mt-1">
-            ID: {admissionNo}
-          </div>
+            {/* DOB */}
+            <div className="text-[9px] text-gray-700">
+              {dob}
+            </div>
 
+            {/* Admission No */}
+            <div className="text-[8px] text-gray-500 mt-1">
+              ID: {admissionNo}
+            </div>
+
+          </div>
         </div>
       </div>
-    </div>
-  );
-};
+    );
+  };
+
   // Main render function
   const renderIdCard = (student, image) => {
     if (!student) return null;
@@ -974,6 +1022,7 @@ const IdCard = () => {
                       <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Section</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Father Name</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Contact</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Photo</th>
                       <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Actions</th>
                     </tr>
                   </thead>
@@ -998,6 +1047,19 @@ const IdCard = () => {
                         <td className="px-4 py-3 text-sm text-gray-600">{student.basicInfo?.section || 'N/A'}</td>
                         <td className="px-4 py-3 text-sm text-gray-600">{student.basicInfo?.fatherName || 'N/A'}</td>
                         <td className="px-4 py-3 text-sm text-gray-600">{student.basicInfo?.fatherPhone || 'N/A'}</td>
+                        <td className="px-4 py-3">
+                          {student.basicInfo?.photoUrl ? (
+                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-green-100 text-green-800">
+                              <CheckCircle size={12} className="mr-1" />
+                              Uploaded
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-gray-100 text-gray-500">
+                              <Clock size={12} className="mr-1" />
+                              No Photo
+                            </span>
+                          )}
+                        </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center justify-center gap-2">
                             <button
@@ -1089,34 +1151,40 @@ const IdCard = () => {
                   <div className="flex gap-2">
                     {studentImage && (
                       <button
-                        onClick={() => {
-                          setStudentImage(null);
-                          setStudentImageFile(null);
-                          toast.info('Image removed');
-                        }}
+                        onClick={deleteStudentPhoto}
                         className="px-2 py-1 text-xs bg-red-100 text-red-600 rounded hover:bg-red-200"
+                        disabled={isUploading}
                       >
-                        Remove
+                        Delete
                       </button>
                     )}
                     <button
                       onClick={() => fileInputRef.current.click()}
-                      className="px-3 py-1 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition flex items-center gap-1"
+                      className="px-3 py-1 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition flex items-center gap-1 disabled:opacity-50"
+                      disabled={isUploading}
                     >
-                      <Upload size={14} />
-                      <span>{studentImage ? 'Change' : 'Upload'}</span>
+                      {isUploading ? (
+                        <Loader size={14} className="animate-spin" />
+                      ) : (
+                        <Upload size={14} />
+                      )}
+                      <span>{isUploading ? 'Uploading...' : studentImage ? 'Change' : 'Upload'}</span>
                     </button>
                     <input
                       ref={fileInputRef}
                       type="file"
                       accept="image/*"
-                      onChange={handleImageUpload}
+                      onChange={handleImageUploadWithServer}
                       className="hidden"
+                      disabled={isUploading}
                     />
                   </div>
                 </div>
-                {studentImage && (
-                  <p className="text-xs text-green-600 mt-1">Image uploaded successfully!</p>
+                {studentImage && !isUploading && (
+                  <p className="text-xs text-green-600 mt-1">Photo uploaded successfully!</p>
+                )}
+                {isUploading && (
+                  <p className="text-xs text-blue-600 mt-1">Uploading photo...</p>
                 )}
               </div>
 
@@ -1159,7 +1227,7 @@ const IdCard = () => {
               <div className="flex gap-3 mt-6 w-full max-w-md">
                 <button
                   onClick={downloadSinglePDF}
-                  disabled={isGenerating}
+                  disabled={isGenerating || isUploading}
                   className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center justify-center gap-2 disabled:opacity-50"
                 >
                   {isGenerating ? (
@@ -1224,7 +1292,9 @@ const IdCard = () => {
             <div className="p-6 flex flex-col items-center">
               <div className="flex justify-center items-center p-4 bg-gray-50 rounded-xl border border-gray-200 w-full overflow-auto">
                 <div ref={cardRef}>
-                  {renderIdCard(generatedCards[currentCardIndex], null)}
+                  {renderIdCard(generatedCards[currentCardIndex], 
+                    generatedCards[currentCardIndex]?.basicInfo?.photoUrl || null
+                  )}
                 </div>
               </div>
               

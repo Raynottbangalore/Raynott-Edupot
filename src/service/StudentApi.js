@@ -1634,6 +1634,199 @@ static async saveAttendance(attendanceData) {
       return { success: false, error: error.message };
     }
   }
+
+  // src/service/StudentApi.js
+
+/**
+ * Upload student photo
+ * @param {string} studentId - Student ID
+ * @param {File} photoFile - Photo file
+ * @returns {Promise<Object>} - Upload result
+ */
+static async uploadStudentPhoto(studentId, photoFile) {
+  try {
+    const user = auth.currentUser;
+    if (!user) throw new Error('No authenticated user');
+    
+    const token = await user.getIdToken(false);
+    
+    const formData = new FormData();
+    formData.append('photo', photoFile);
+    
+    const response = await fetch(`${BASE_URL}/students/${studentId}/photo`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+      body: formData,
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok || !data.success) {
+      throw new Error(data.error || 'Failed to upload photo');
+    }
+    
+    this.trackRequest();
+    return {
+      success: true,
+      photoUrl: data.photoUrl,
+      studentId: data.studentId,
+      message: 'Photo uploaded successfully'
+    };
+  } catch (error) {
+    console.error('❌ Upload student photo error:', error);
+    return { success: false, error: error.message || 'Could not upload photo' };
+  }
+}
+
+/**
+ * Delete student photo
+ * @param {string} studentId - Student ID
+ * @returns {Promise<Object>} - Delete result
+ */
+static async deleteStudentPhoto(studentId) {
+  try {
+    const data = await this.makeRequest(`${BASE_URL}/students/${studentId}/photo`, {
+      method: 'DELETE',
+    });
+    
+    return {
+      success: true,
+      message: 'Photo deleted successfully'
+    };
+  } catch (error) {
+    console.error('❌ Delete student photo error:', error);
+    return { success: false, error: error.message || 'Could not delete photo' };
+  }
+}
+
+/**
+ * Get student photo URL
+ * @param {string} studentId - Student ID
+ * @returns {Promise<Object>} - Photo URL
+ */
+static async getStudentPhoto(studentId) {
+  try {
+    const data = await this.makeRequest(`${BASE_URL}/students/${studentId}/photo`, {
+      method: 'GET',
+    });
+    
+    return {
+      success: true,
+      photoUrl: data.photoUrl,
+      studentId: data.studentId
+    };
+  } catch (error) {
+    console.error('❌ Get student photo error:', error);
+    return { success: false, error: error.message || 'Could not get photo' };
+  }
+}
+
+/**
+ * Upload school logo
+ * @param {File} logoFile - Logo file
+ * @returns {Promise<Object>} - Upload result
+ */
+static async uploadSchoolLogo(logoFile) {
+  try {
+    const user = auth.currentUser;
+    if (!user) throw new Error('No authenticated user');
+    
+    const token = await user.getIdToken(false);
+    
+    const formData = new FormData();
+    formData.append('photo', logoFile);
+    
+    const response = await fetch(`${BASE_URL}/school/logo`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+      body: formData,
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok || !data.success) {
+      throw new Error(data.error || 'Failed to upload logo');
+    }
+    
+    this.trackRequest();
+    return {
+      success: true,
+      logoUrl: data.logoUrl,
+      message: 'School logo uploaded successfully'
+    };
+  } catch (error) {
+    console.error('❌ Upload school logo error:', error);
+    return { success: false, error: error.message || 'Could not upload logo' };
+  }
+}
+
+/**
+ * Delete school logo
+ * @returns {Promise<Object>} - Delete result
+ */
+static async deleteSchoolLogo() {
+  try {
+    const data = await this.makeRequest(`${BASE_URL}/school/logo`, {
+      method: 'DELETE',
+    });
+    
+    return {
+      success: true,
+      message: 'School logo deleted successfully'
+    };
+  } catch (error) {
+    console.error('❌ Delete school logo error:', error);
+    return { success: false, error: error.message || 'Could not delete logo' };
+  }
+}
+
+/**
+ * Bulk upload student photos
+ * @param {FileList} photoFiles - List of photo files
+ * @returns {Promise<Object>} - Upload results
+ */
+static async bulkUploadStudentPhotos(photoFiles) {
+  try {
+    const user = auth.currentUser;
+    if (!user) throw new Error('No authenticated user');
+    
+    const token = await user.getIdToken(false);
+    
+    const formData = new FormData();
+    for (let i = 0; i < photoFiles.length; i++) {
+      formData.append('photos', photoFiles[i]);
+    }
+    
+    const response = await fetch(`${BASE_URL}/students/photos/bulk`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+      body: formData,
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok || !data.success) {
+      throw new Error(data.error || 'Failed to upload photos');
+    }
+    
+    this.trackRequest();
+    return {
+      success: true,
+      results: data.results,
+      errors: data.errors,
+      message: data.message
+    };
+  } catch (error) {
+    console.error('❌ Bulk upload student photos error:', error);
+    return { success: false, error: error.message || 'Could not upload photos' };
+  }
+}
 }
 
 export default StudentApi;
