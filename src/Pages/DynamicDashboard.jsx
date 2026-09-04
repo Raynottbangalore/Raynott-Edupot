@@ -1,6 +1,5 @@
-// src/components/dashboard/DynamicDashboard.jsx
 import React, { useState, useEffect } from 'react';
-import { LogOut, Users, UserPlus, List, BarChart3, Search, DollarSign, Award, Ticket, School, MapPin, Award as AwardIcon, Building, Calendar } from 'lucide-react';
+import { LogOut, Users, UserPlus, List, BarChart3, Search, DollarSign, Award, Ticket, School, MapPin, Award as AwardIcon, Building, Calendar, Receipt, IdCardIcon } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { auth } from '../service/firebase';
 import SchoolApi from '../service/SchoolApi';
@@ -15,7 +14,9 @@ import TeachersAssessment from '../Components/TeachersAssessment';
 import HallTicket from '../Components/HallTicket';
 import MarksCard from '../Components/MarksCard';
 import StudentAttendance from '../Components/StudentAttendance';
-import TeachersAttendance from '../Components/TeachersAttendance'; 
+import TeachersAttendance from '../Components/TeachersAttendance';
+import Billing from '../Components/Billing';
+import IdCard from '../Components/IdCard';
 
 // Tab Icons & Names Mapping
 const TAB_CONFIG = {
@@ -29,8 +30,10 @@ const TAB_CONFIG = {
   assessments: { icon: BarChart3, name: 'Assessment Reports' },
   teachers: { icon: Users, name: 'Teachers Assessment' },
   hallticket: { icon: Ticket, name: 'Hall Ticket' },
-  studentAttendance: { icon: Calendar, name: 'Student Attendance' }, 
-  teacherAttendance: { icon: Users, name: 'Teachers Attendance' } 
+  studentAttendance: { icon: Calendar, name: 'Student Attendance' },
+  teacherAttendance: { icon: Users, name: 'Teachers Attendance' },
+  billing: { icon: Receipt, name: 'Billing' },
+  idcard: { icon: IdCardIcon, name: 'ID Card' }
 };
 
 // Tab Components Mapping
@@ -45,8 +48,10 @@ const TAB_COMPONENTS = {
   assessments: AssessmentTab,
   teachers: TeachersAssessment,
   hallticket: HallTicket,
-  studentAttendance: StudentAttendance, 
-  teacherAttendance: TeachersAttendance 
+  studentAttendance: StudentAttendance,
+  teacherAttendance: TeachersAttendance,
+  billing: Billing,
+  idcard: IdCard
 };
 
 const DynamicDashboard = () => {
@@ -308,7 +313,7 @@ const DynamicDashboard = () => {
     toast.info('Data refreshed');
   };
 
-  //  ADDED: Function to update hall ticket data from HallTicket component
+  // Function to update hall ticket data from HallTicket component
   const updateHallTicketData = (studentId, hallTicketData) => {
     if (studentId && hallTicketData) {
       setStudentHallTicketData(prev => ({
@@ -357,7 +362,7 @@ const DynamicDashboard = () => {
       onUpdateStudent: handleUpdateStudent,
     };
 
-    // ⭐ Special props for specific tabs
+    // Special props for specific tabs
     switch (normalizedTab) {
       case 'addStudent':
         return (
@@ -431,6 +436,10 @@ const DynamicDashboard = () => {
             onUpdateTeacher={handleUpdateStudent}
           />
         );
+      case 'billing':
+        return <Billing />;
+      case 'idcard':
+        return <IdCard />;
       default:
         return <Component {...commonProps} />;
     }

@@ -6,7 +6,7 @@ import {
   Lock, Unlock, CheckCircle, AlertCircle,
   BarChart3, X, Copy,
   Users, Eye, Plus, Settings, ChevronDown, ChevronUp,
-  User, Calendar
+  User, Calendar, Receipt, IdCardIcon
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { auth } from '../service/firebase';
@@ -24,7 +24,9 @@ const AVAILABLE_TABS = [
   { id: 'teachers', name: 'Teachers Assessment', icon: '👨‍🏫', description: 'Teachers assessment view' },
   { id: 'hallticket', name: 'Hall Ticket', icon: '🎫', description: 'Generate hall tickets' },
   { id: 'studentAttendance', name: 'Student Attendance', icon: '📅', description: 'Mark and manage student attendance' },
-  { id: 'teacherAttendance', name: 'Teachers Attendance', icon: '👨‍🏫', description: 'Mark and manage teacher attendance' }
+  { id: 'teacherAttendance', name: 'Teachers Attendance', icon: '👨‍🏫', description: 'Mark and manage teacher attendance' },
+  { id: 'billing', name: 'Billing', icon: '🧾', description: 'Generate and manage bills' },
+  { id: 'idcard', name: 'ID Card', icon: '🪪', description: 'Generate ID cards for students' }
 ];
 
 // Helper function to normalize tab IDs (for backward compatibility)
@@ -917,7 +919,7 @@ const AdminDashboard = ({ user, onLogout }) => {
                       />
                       <div className="ml-3">
                         <div className="font-semibold">
-                          <span className="mr-2">{tab.icon}</span>
+                          {/* <span className="mr-2">{tab.icon}</span> */}
                           {tab.name}
                         </div>
                         <p className="text-sm text-gray-600">{tab.description}</p>

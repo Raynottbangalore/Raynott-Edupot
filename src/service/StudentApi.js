@@ -1827,6 +1827,133 @@ static async bulkUploadStudentPhotos(photoFiles) {
     return { success: false, error: error.message || 'Could not upload photos' };
   }
 }
+// src/service/StudentApi.js - Add this method
+
+/**
+ * Get student photo as base64 data URL (with better CORS handling)
+ * @param {string} studentId - Student ID
+ * @returns {Promise<Object>} - Photo as base64
+ */
+static async getStudentPhotoBase64(studentId) {
+  try {
+    // First try to get the photo URL
+    const photoResult = await this.getStudentPhoto(studentId);
+    
+    if (!photoResult.success || !photoResult.photoUrl) {
+      return { success: false, error: 'No photo found', photoData: null };
+    }
+    
+    const photoUrl = photoResult.photoUrl;
+    
+    // If it's already a data URL, return it
+    if (photoUrl.startsWith('data:image')) {
+      return { success: true, photoData: photoUrl };
+    }
+    
+    // Use a proxy approach - fetch with 'no-cors' mode
+    try {
+      // Try fetching with cors mode first
+      const response = await fetch(photoUrl, {
+        mode: 'cors',
+        cache: 'no-cache'
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      
+      const blob = await response.blob();
+      
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          resolve({ 
+            success: true, 
+            photoData: reader.result 
+          });
+        };
+        reader.onerror = () => {
+          resolve({ 
+            success: false, 
+            error: 'Failed to convert image to base64',
+            photoData: null
+          });
+        };
+        reader.readAsDataURL(blob);
+      });
+    } catch (fetchError) {
+      console.warn('⚠️ CORS fetch failed, trying alternative method:', fetchError.message);
+      
+      // Try using XMLHttpRequest (sometimes handles CORS better)
+      return new Promise((resolve) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('GET', photoUrl, true);
+        xhr.responseType = 'blob';
+        
+        xhr.onload = function() {
+          if (this.status === 200) {
+            const blob = this.response;
+            const reader = new FileReader();
+            reader.onloadend = () => {
+              resolve({ 
+                success: true, 
+                photoData: reader.result 
+              });
+            };
+            reader.onerror = () => {
+              resolve({ 
+                success: false, 
+                error: 'Failed to convert image to base64',
+                photoData: null
+              });
+            };
+            reader.readAsDataURL(blob);
+          } else {
+            resolve({ 
+              success: false, 
+              error: `HTTP ${this.status}`,
+              photoData: null
+            });
+          }
+        };
+        
+        xhr.onerror = function() {
+          // Last resort: try with image element
+          const img = new Image();
+          img.crossOrigin = 'anonymous';
+          img.referrerPolicy = 'no-referrer';
+          
+          img.onload = () => {
+            try {
+              const canvas = document.createElement('canvas');
+              canvas.width = img.naturalWidth || img.width;
+              canvas.height = img.naturalHeight || img.height;
+              const ctx = canvas.getContext('2d');
+              ctx.drawImage(img, 0, 0);
+              const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+              resolve({ success: true, photoData: dataUrl });
+            } catch (canvasError) {
+              console.error('❌ Canvas conversion error:', canvasError);
+              resolve({ success: false, error: 'Canvas conversion failed', photoData: null });
+            }
+          };
+          
+          img.onerror = () => {
+            console.error('❌ Image load error for URL:', photoUrl);
+            resolve({ success: false, error: 'Image load failed', photoData: null });
+          };
+          
+          img.src = photoUrl;
+        };
+        
+        xhr.send();
+      });
+    }
+  } catch (error) {
+    console.error('❌ Get student photo base64 error:', error);
+    return { success: false, error: error.message || 'Could not get photo', photoData: null };
+  }
+}
 }
 
 export default StudentApi;

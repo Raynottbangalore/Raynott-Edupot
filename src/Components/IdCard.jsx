@@ -1,14 +1,14 @@
-// src/Components/IdCard.jsx
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-  Search, Download, Printer,X,Loader,Users,User,School,MapPin,Phone,Mail,
-  Calendar,UserCheck,FileText,Eye,RefreshCw,ChevronLeft,ChevronRight,Camera,
-  Upload,Palette,Layout,Star,Award,BookOpen,GraduationCap,Shield,CreditCard,
-  Fingerprint,BadgeCheck,QrCode,Heart,Home,User2,Building2,Hash,Edit,Trash2,CheckCircle,Clock,MoreVertical
+  Search, Download, Printer, X, Loader, Users, User, School, MapPin, Phone, Mail,
+  Calendar, UserCheck, FileText, Eye, RefreshCw, ChevronLeft, ChevronRight, Camera,
+  Upload, Palette, Layout, Star, Award, BookOpen, GraduationCap, Shield, CreditCard,
+  Fingerprint, BadgeCheck, QrCode, Heart, Home, User2, Building2, Hash, Edit, Trash2, CheckCircle, Clock, MoreVertical
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import StudentApi from '../service/StudentApi';
 import html2canvas from 'html2canvas';
+import html2pdf from 'html2pdf.js';
 import jsPDF from 'jspdf';
 
 const IdCard = () => {
@@ -47,7 +47,7 @@ const IdCard = () => {
   const [previewScale, setPreviewScale] = useState(1);
   const [isUploading, setIsUploading] = useState(false);
 
-  // Design templates - 3 completely different designs
+  // Design templates
   const designs = {
     design1: {
       name: 'Classic Heritage',
@@ -198,18 +198,15 @@ const IdCard = () => {
     }
   };
 
-  
   const handleImageUploadWithServer = async (event) => {
     const file = event.target.files[0];
     if (!file) return;
 
-    // Validate file size (max 5MB)
     if (file.size > 5 * 1024 * 1024) {
       toast.error('Image size must be less than 5MB');
       return;
     }
 
-    // Validate file type
     if (!file.type.startsWith('image/')) {
       toast.error('Only image files are allowed');
       return;
@@ -217,7 +214,6 @@ const IdCard = () => {
 
     setIsUploading(true);
 
-    // Show local preview immediately
     const reader = new FileReader();
     reader.onload = (e) => {
       setStudentImage(e.target.result);
@@ -225,17 +221,14 @@ const IdCard = () => {
     };
     reader.readAsDataURL(file);
 
-    // Upload to server
     if (selectedStudent) {
       const photoUrl = await uploadPhotoToServer(selectedStudent.studentId, file);
       if (photoUrl) {
-        // Update student in the list with new photo URL
         setStudents(prev => prev.map(s => 
           s.studentId === selectedStudent.studentId 
             ? { ...s, basicInfo: { ...s.basicInfo, photoUrl: photoUrl } }
             : s
         ));
-        // Update selected student
         setSelectedStudent(prev => ({
           ...prev,
           basicInfo: { ...prev.basicInfo, photoUrl: photoUrl }
@@ -245,7 +238,6 @@ const IdCard = () => {
     setIsUploading(false);
   };
 
-  
   const deleteStudentPhoto = async () => {
     if (!selectedStudent) return;
     
@@ -258,13 +250,11 @@ const IdCard = () => {
         setStudentImageFile(null);
         toast.success('Photo deleted successfully');
         
-        // Update student in the list
         setStudents(prev => prev.map(s => 
           s.studentId === selectedStudent.studentId 
             ? { ...s, basicInfo: { ...s.basicInfo, photoUrl: null } }
             : s
         ));
-        // Update selected student
         setSelectedStudent(prev => ({
           ...prev,
           basicInfo: { ...prev.basicInfo, photoUrl: null }
@@ -278,11 +268,9 @@ const IdCard = () => {
     }
   };
 
-
   // Generate single ID card
   const generateSingleCard = (student) => {
     setSelectedStudent(student);
-    // Load existing photo if available
     if (student.basicInfo?.photoUrl) {
       setStudentImage(student.basicInfo.photoUrl);
     } else {
@@ -304,91 +292,297 @@ const IdCard = () => {
     setShowBulkPreview(true);
   };
 
-  // Download single PDF
-  const downloadSinglePDF = async () => {
-    if (!cardRef.current || !selectedStudent) return;
-
-    setIsGenerating(true);
+  // Get student photo as base64 using the API
+  const getStudentPhotoBase64 = async (studentId) => {
     try {
-      const canvas = await html2canvas(cardRef.current, {
-        scale: 3,
-        useCORS: true,
-        backgroundColor: '#ffffff'
-      });
-      
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: [54, 85] // Vertical format
-      });
-      
-      pdf.addImage(imgData, 'PNG', 0, 0, 54, 85);
-      pdf.save(`ID-Card-${selectedStudent.basicInfo?.name || 'Student'}.pdf`);
-      toast.success('ID Card downloaded successfully!');
+      const result = await StudentApi.getStudentPhotoBase64(studentId);
+      if (result.success && result.photoData) {
+        return result.photoData;
+      }
+      return null;
     } catch (error) {
-      console.error('PDF generation error:', error);
-      toast.error('Failed to generate PDF');
-    } finally {
-      setIsGenerating(false);
+      console.error('Error getting photo base64:', error);
+      return null;
     }
   };
 
+const downloadSinglePDF = async () => {
+  if (!selectedStudent) return;
+
+  setIsGenerating(true);
+  try {
+    let imageDataUrl = studentImage;
+    if (selectedStudent.basicInfo?.photoUrl && !imageDataUrl?.startsWith('data:image')) {
+      const base64Photo = await getStudentPhotoBase64(selectedStudent.studentId);
+      if (base64Photo) {
+        imageDataUrl = base64Photo;
+      }
+    }
+    
+    const tempDiv = document.createElement('div');
+    tempDiv.style.position = 'absolute';
+    tempDiv.style.left = '-9999px';
+    tempDiv.style.top = '0';
+    tempDiv.style.zIndex = '-9999';
+    tempDiv.innerHTML = renderCardHTML(selectedStudent, imageDataUrl, selectedDesign);
+    document.body.appendChild(tempDiv);
+
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    let pdfFormat;
+    let pdfOrientation;
+    let cardWidth;
+    let cardHeight;
+    
+    if (selectedDesign === 'design1') {
+      pdfFormat = [85, 54]; // width: 85mm (8.5cm), height: 54mm (5.4cm) - Landscape
+      pdfOrientation = 'landscape';
+      cardWidth = 323; // 8.56cm in px
+      cardHeight = 204; // 5.40cm in px
+    } else {
+      pdfFormat = [54, 85]; // width: 54mm (5.4cm), height: 85mm (8.5cm) - Portrait
+      pdfOrientation = 'portrait';
+      cardWidth = 204; // 5.40cm in px
+      cardHeight = 323; // 8.56cm in px
+    }
+
+    const opt = {
+      margin: 0,
+      filename: `ID-Card-${selectedStudent.basicInfo?.name || 'Student'}.pdf`,
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { 
+        scale: 3, 
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+        allowTaint: true,
+        width: cardWidth,
+        height: cardHeight,
+        onclone: (clonedDoc) => {
+          const elements = clonedDoc.querySelectorAll('*');
+          elements.forEach(el => {
+            if (el.style.color && el.style.color.includes('oklch')) {
+              el.style.color = '#1f2937';
+            }
+            if (el.style.backgroundColor && el.style.backgroundColor.includes('oklch')) {
+              el.style.backgroundColor = '#ffffff';
+            }
+            if (el.style.background && el.style.background.includes('oklch')) {
+              el.style.background = '#ffffff';
+            }
+            if (el.style.borderColor && el.style.borderColor.includes('oklch')) {
+              el.style.borderColor = '#e5e7eb';
+            }
+          });
+        }
+      },
+      jsPDF: { 
+        unit: 'mm', 
+        format: pdfFormat, 
+        orientation: pdfOrientation 
+      },
+      pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+    };
+
+    await html2pdf().set(opt).from(tempDiv).save();
+    
+    document.body.removeChild(tempDiv);
+    toast.success('ID Card downloaded successfully!');
+  } catch (error) {
+    console.error('PDF generation error:', error);
+    toast.error('Failed to generate PDF: ' + error.message);
+  } finally {
+    setIsGenerating(false);
+  }
+};
+
   // Download bulk PDF
   const downloadBulkPDF = async () => {
-    if (!cardRef.current || generatedCards.length === 0) return;
+  if (generatedCards.length === 0) return;
 
-    setIsGenerating(true);
-    try {
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: 'a4'
-      });
+  setIsGenerating(true);
+  try {
+    const container = document.createElement('div');
+    container.style.position = 'absolute';
+    container.style.left = '-9999px';
+    container.style.top = '0';
+    container.style.zIndex = '-9999';
+    container.style.display = 'grid';
+    container.style.gridTemplateColumns = 'repeat(3, 1fr)';
+    container.style.gap = '20px';
+    container.style.padding = '20px';
+    container.style.background = '#ffffff';
+    container.style.width = '800px';
+    document.body.appendChild(container);
 
-      const cardsPerPage = 9;
-      const cardWidth = 54;
-      const cardHeight = 85;
-      const marginX = 15;
-      const marginY = 15;
-      const gapX = 8;
-      const gapY = 8;
-
-      for (let i = 0; i < generatedCards.length; i++) {
-        const index = i % cardsPerPage;
-        const page = Math.floor(i / cardsPerPage);
-        
-        if (index === 0 && i > 0) {
-          pdf.addPage();
+    for (let i = 0; i < generatedCards.length; i++) {
+      const student = generatedCards[i];
+      let imageDataUrl = null;
+      
+      if (student.basicInfo?.photoUrl) {
+        const base64Photo = await getStudentPhotoBase64(student.studentId);
+        if (base64Photo) {
+          imageDataUrl = base64Photo;
         }
-
-        const col = index % 3;
-        const row = Math.floor(index / 3);
-        
-        const x = marginX + (col * (cardWidth + gapX));
-        const y = marginY + (row * (cardHeight + gapY));
-
-        setCurrentCardIndex(i);
-        await new Promise(resolve => setTimeout(resolve, 100));
-        
-        const canvas = await html2canvas(cardRef.current, {
-          scale: 2,
-          useCORS: true,
-          backgroundColor: '#ffffff'
-        });
-        
-        const imgData = canvas.toDataURL('image/png');
-        pdf.addImage(imgData, 'PNG', x, y, cardWidth, cardHeight);
       }
-
-      pdf.save('ID-Cards-Bulk.pdf');
-      toast.success('All ID Cards downloaded successfully!');
-    } catch (error) {
-      console.error('Bulk PDF generation error:', error);
-      toast.error('Failed to generate PDF');
-    } finally {
-      setIsGenerating(false);
+      
+      const cardHTML = renderCardHTML(student, imageDataUrl, selectedDesign);
+      const cardDiv = document.createElement('div');
+      cardDiv.innerHTML = cardHTML;
+      container.appendChild(cardDiv.firstElementChild);
+      
+      setCurrentCardIndex(i);
+      await new Promise(resolve => setTimeout(resolve, 100));
     }
+
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    const opt = {
+      margin: [10, 10, 10, 10],
+      filename: 'ID-Cards-Bulk.pdf',
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { 
+        scale: 2, 
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+        allowTaint: true,
+      },
+      jsPDF: { 
+        unit: 'mm', 
+        format: 'a4', 
+        orientation: 'portrait' 
+      },
+      pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+    };
+
+    await html2pdf().set(opt).from(container).save();
+    
+    document.body.removeChild(container);
+    toast.success('All ID Cards downloaded successfully!');
+  } catch (error) {
+    console.error('Bulk PDF generation error:', error);
+    toast.error('Failed to generate PDF: ' + error.message);
+  } finally {
+    setIsGenerating(false);
+  }
+};
+
+  // Render card as HTML string for PDF generation
+  const renderCardHTML = (student, image, design) => {
+    const basicInfo = student.basicInfo || {};
+    const name = basicInfo.name || 'Student Name';
+    const admissionNo = basicInfo.admissionNo || 'N/A';
+    const grade = basicInfo.grade || 'N/A';
+    const section = basicInfo.section || 'N/A';
+    const fatherName = basicInfo.fatherName || 'N/A';
+    const motherName = basicInfo.motherName || 'N/A';
+    const dob = basicInfo.dob || 'N/A';
+    const phone = basicInfo.fatherPhone || basicInfo.motherPhone || 'N/A';
+    const address = basicInfo.address || 'N/A';
+    const bloodGroup = basicInfo.bloodGroup || 'N/A';
+
+    // Design 2: Modern Vertical (Portrait: 5.40cm x 8.56cm)
+    if (design === 'design2') {
+      return `
+        <div style="width:204px;height:323px;background:#ffffff;border-radius:16px;box-shadow:0 8px 16px rgba(0,0,0,0.15);border:1px solid #f3f4f6;overflow:hidden;font-family:Arial,sans-serif;display:flex;flex-direction:column;">
+          <div style="height:6px;background:#6366f1;"></div>
+          <div style="padding:12px 12px 8px 12px;text-align:center;background:#e0e7ff;border-bottom:2px solid #a5b4fc;">
+            <div style="font-size:10px;font-weight:900;color:#312e81;text-transform:uppercase;letter-spacing:0.05em;">${schoolInfo.schoolName || 'SCHOOL NAME'}</div>
+            <div style="font-size:6px;font-weight:700;color:#4338ca;text-transform:uppercase;letter-spacing:0.1em;margin-top:2px;">${schoolInfo.schoolAffiliation || 'EDUCATION FOR ALL'}</div>
+          </div>
+          <div style="display:flex;justify-content:center;padding-top:8px;padding-bottom:4px;">
+            <div style="position:relative;">
+              ${image ? `<div style="width:75px;height:95px;border-radius:12px;border:2px solid #a5b4fc;overflow:hidden;background:#ffffff;"><img src="${image}" style="width:100%;height:100%;object-fit:cover;" /></div>` : 
+                `<div style="width:75px;height:95px;border-radius:12px;background:#e0e7ff;display:flex;align-items:center;justify-content:center;border:2px solid #a5b4fc;"><span style="color:#4338ca;font-weight:700;font-size:20px;">${name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}</span></div>`}
+              <div style="position:absolute;bottom:-4px;left:50%;transform:translateX(-50%);background:#ef4444;color:#ffffff;font-size:6px;font-weight:700;padding:2px 6px;border-radius:9999px;">${bloodGroup}</div>
+            </div>
+          </div>
+          <div style="text-align:center;margin-top:4px;">
+            <div style="font-weight:700;color:#1f2937;font-size:14px;line-height:1.2;">${name}</div>
+            <div style="font-size:7px;color:#4f46e5;font-weight:700;">#${admissionNo}</div>
+          </div>
+          <div style="padding:6px 12px;flex:1;">
+            <div style="font-size:8px;">
+              <div style="display:flex;justify-content:space-between;border-bottom:1px solid #e0e7ff;padding-bottom:2px;margin-bottom:2px;"><span style="color:#4338ca;font-weight:700;">Father</span><span style="color:#374151;font-weight:500;">${fatherName}</span></div>
+              <div style="display:flex;justify-content:space-between;border-bottom:1px solid #e0e7ff;padding-bottom:2px;margin-bottom:2px;"><span style="color:#4338ca;font-weight:700;">Mother</span><span style="color:#374151;font-weight:500;">${motherName}</span></div>
+              <div style="display:flex;justify-content:space-between;border-bottom:1px solid #e0e7ff;padding-bottom:2px;margin-bottom:2px;"><span style="color:#4338ca;font-weight:700;">DOB</span><span style="color:#374151;font-weight:500;">${dob}</span></div>
+              <div style="display:flex;justify-content:space-between;border-bottom:1px solid #e0e7ff;padding-bottom:2px;margin-bottom:2px;"><span style="color:#4338ca;font-weight:700;">Class</span><span style="color:#1f2937;font-weight:700;">${grade} ${section ? `- ${section}` : ''}</span></div>
+              <div style="display:flex;justify-content:space-between;"><span style="color:#4338ca;font-weight:700;">Contact</span><span style="color:#374151;font-weight:500;">${phone}</span></div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // Design 3: Premium Split (Portrait: 5.40cm x 8.56cm)
+    if (design === 'design3') {
+      return `
+        <div style="width:204px;height:323px;background:#ffffff;border:1px solid #000000;overflow:hidden;display:flex;font-family:Arial,sans-serif;">
+          <div style="width:55px;height:100%;flex-shrink:0;display:flex;align-items:center;justify-content:center;border-right:1px solid #000000;background:#1a1a2e;">
+            <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;color:#ffffff;writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;line-height:1.5;">
+              <span style="font-weight:900;font-size:13px;letter-spacing:0.05em;">${schoolInfo.schoolName || 'ABC SCHOOL'}</span>
+              <span style="font-size:7px;opacity:0.8;margin-top:4px;">${schoolInfo.schoolAddress || 'Address'} || ${schoolInfo.schoolPhone || 'Phone'} || ${schoolInfo.schoolEmail || 'Email'}</span>
+            </div>
+          </div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#ffffff;padding:0 8px;">
+            <div style="position:relative;">
+              <div style="width:70px;height:85px;border:1px solid #000000;overflow:hidden;background:#ffffff;display:flex;align-items:center;justify-content:center;">
+                ${image ? `<img src="${image}" style="width:100%;height:100%;object-fit:cover;" />` : `<span style="font-size:10px;color:#6b7280;">Image</span>`}
+              </div>
+              ${bloodGroup && bloodGroup !== 'N/A' ? `<div style="position:absolute;bottom:-4px;left:50%;transform:translateX(-50%);background:#ef4444;color:#ffffff;font-size:6px;font-weight:700;padding:2px 6px;border-radius:9999px;">${bloodGroup}</div>` : ''}
+            </div>
+            <div style="margin-top:12px;text-align:center;">
+              <div style="font-size:11px;font-weight:700;color:#000000;">${name}</div>
+              <div style="font-size:10px;color:#1f2937;">${grade} ${section ? `- ${section}` : ''}</div>
+              <div style="font-size:9px;color:#374151;">${phone}</div>
+              <div style="font-size:9px;color:#374151;">${dob}</div>
+              <div style="font-size:8px;color:#6b7280;margin-top:4px;">ID: ${admissionNo}</div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // Default: Design 1 - Classic Heritage (Landscape: 8.56cm x 5.40cm)
+    return `
+      <div style="width:323px;height:204px;background:#ffffff;border-radius:12px;box-shadow:0 4px 6px rgba(0,0,0,0.1);border:1px solid #e5e7eb;overflow:hidden;position:relative;font-family:Arial,sans-serif;">
+        <div style="position:absolute;top:0;left:0;width:24px;height:24px;border-top:2px solid #a5b4fc;border-left:2px solid #a5b4fc;border-top-left-radius:8px;"></div>
+        <div style="position:absolute;top:0;right:0;width:24px;height:24px;border-top:2px solid #a5b4fc;border-right:2px solid #a5b4fc;border-top-right-radius:8px;"></div>
+        <div style="position:absolute;bottom:0;left:0;width:24px;height:24px;border-bottom:2px solid #a5b4fc;border-left:2px solid #a5b4fc;border-bottom-left-radius:8px;"></div>
+        <div style="position:absolute;bottom:0;right:0;width:24px;height:24px;border-bottom:2px solid #a5b4fc;border-right:2px solid #a5b4fc;border-bottom-right-radius:8px;"></div>
+        <div style="position:absolute;left:24px;right:24px;top:6px;border-top:1px solid #c7d2fe;"></div>
+        <div style="position:absolute;left:24px;right:24px;bottom:6px;border-top:1px solid #c7d2fe;"></div>
+        <div style="background:#e0e7ff;padding:6px 16px;text-align:center;position:relative;border-bottom:2px solid #a5b4fc;">
+          <div style="position:absolute;left:8px;top:50%;transform:translateY(-50%);font-size:16px;">🛡</div>
+          <div style="position:absolute;right:8px;top:50%;transform:translateY(-50%);font-size:16px;">🛡</div>
+          <div style="color:#312e81;font-weight:900;font-size:14px;letter-spacing:0.05em;">${schoolInfo.schoolName || 'SCHOOL NAME'}</div>
+          <div style="color:#4338ca;font-weight:700;font-size:8px;letter-spacing:0.1em;">${schoolInfo.schoolAffiliation || 'EST. 1985 • GOVT. RECOGNISED'}</div>
+        </div>
+        <div style="padding:10px;display:flex;gap:12px;">
+          <div style="flex-shrink:0;position:relative;">
+            ${image ? `<div style="width:70px;height:85px;border-radius:4px;border:2px solid #a5b4fc;overflow:hidden;"><img src="${image}" style="width:100%;height:100%;object-fit:cover;" /></div>` : 
+              `<div style="width:70px;height:85px;border-radius:4px;background:#e0e7ff;display:flex;align-items:center;justify-content:center;border:2px solid #a5b4fc;"><span style="color:#4338ca;font-weight:700;font-size:24px;">${name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}</span></div>`}
+            <div style="position:absolute;bottom:-4px;right:-4px;background:#ef4444;color:#ffffff;font-size:6px;font-weight:700;padding:2px 6px;border-radius:9999px;">${bloodGroup}</div>
+          </div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:700;color:#1f2937;font-size:16px;border-bottom:2px solid #c7d2fe;padding-bottom:2px;margin-bottom:2px;">${name}</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 8px;font-size:12px;">
+              <div style="display:flex;align-items:baseline;gap:4px;"><span style="color:#4338ca;font-size:8px;font-weight:700;text-transform:uppercase;">Father</span></div>
+              <div style="display:flex;align-items:baseline;gap:4px;"><span style="color:#374151;font-size:9px;font-weight:500;">${fatherName}</span></div>
+              <div style="display:flex;align-items:baseline;gap:4px;"><span style="color:#4338ca;font-size:8px;font-weight:700;text-transform:uppercase;">Mother</span></div>
+              <div style="display:flex;align-items:baseline;gap:4px;"><span style="color:#374151;font-size:9px;font-weight:500;">${motherName}</span></div>
+              <div style="display:flex;align-items:baseline;gap:4px;"><span style="color:#4338ca;font-size:8px;font-weight:700;text-transform:uppercase;">DOB</span></div>
+              <div style="display:flex;align-items:baseline;gap:4px;"><span style="color:#374151;font-size:9px;font-weight:500;">${dob}</span></div>
+              <div style="display:flex;align-items:baseline;gap:4px;"><span style="color:#4338ca;font-size:8px;font-weight:700;text-transform:uppercase;">Contact</span></div>
+              <div style="display:flex;align-items:baseline;gap:4px;"><span style="color:#374151;font-size:9px;font-weight:500;">${phone}</span></div>
+              <div style="display:flex;align-items:baseline;gap:4px;grid-column:span 2;"><span style="color:#4338ca;font-size:8px;font-weight:700;text-transform:uppercase;">Address</span><span style="color:#374151;font-size:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;">${address}</span></div>
+              <div style="display:flex;align-items:baseline;gap:4px;grid-column:span 2;"><span style="color:#4338ca;font-size:8px;font-weight:700;text-transform:uppercase;">Class</span><span style="color:#1f2937;font-size:9px;font-weight:700;">${grade} ${section ? `- ${section}` : ''}</span><span style="color:#4338ca;font-size:8px;font-weight:700;text-transform:uppercase;margin-left:8px;">Adm. No.</span><span style="color:#1f2937;font-size:9px;font-weight:700;">${admissionNo}</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
   };
 
   // Print single card
@@ -498,7 +692,7 @@ const IdCard = () => {
     printWindow.document.close();
   };
 
-  // DESIGN 1: Classic Heritage - Light/White theme with highlighted school info
+  // DESIGN 1: Classic Heritage - INLINE STYLES ONLY (Landscape: 8.56cm x 5.40cm)
   const renderDesign1 = (student, image) => {
     const basicInfo = student.basicInfo || {};
     const name = basicInfo.name || 'Student Name';
@@ -513,97 +707,229 @@ const IdCard = () => {
     const bloodGroup = basicInfo.bloodGroup || 'N/A';
 
     return (
-      <div className="w-[340px] h-[220px] bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden relative" style={{ fontFamily: 'Arial, sans-serif' }}>
-        {/* Decorative corner patterns - light gray */}
-        <div className="absolute top-0 left-0 w-6 h-6 border-t-2 border-l-2 border-indigo-300 rounded-tl-lg"></div>
-        <div className="absolute top-0 right-0 w-6 h-6 border-t-2 border-r-2 border-indigo-300 rounded-tr-lg"></div>
-        <div className="absolute bottom-0 left-0 w-6 h-6 border-b-2 border-l-2 border-indigo-300 rounded-bl-lg"></div>
-        <div className="absolute bottom-0 right-0 w-6 h-6 border-b-2 border-r-2 border-indigo-300 rounded-br-lg"></div>
+      <div style={{
+        width: '323px',
+        height: '204px',
+        backgroundColor: '#ffffff',
+        borderRadius: '12px',
+        boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+        border: '1px solid #e5e7eb',
+        overflow: 'hidden',
+        position: 'relative',
+        fontFamily: 'Arial, sans-serif'
+      }}>
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '24px',
+          height: '24px',
+          borderTop: '2px solid #a5b4fc',
+          borderLeft: '2px solid #a5b4fc',
+          borderTopLeftRadius: '8px'
+        }}></div>
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          right: 0,
+          width: '24px',
+          height: '24px',
+          borderTop: '2px solid #a5b4fc',
+          borderRight: '2px solid #a5b4fc',
+          borderTopRightRadius: '8px'
+        }}></div>
+        <div style={{
+          position: 'absolute',
+          bottom: 0,
+          left: 0,
+          width: '24px',
+          height: '24px',
+          borderBottom: '2px solid #a5b4fc',
+          borderLeft: '2px solid #a5b4fc',
+          borderBottomLeftRadius: '8px'
+        }}></div>
+        <div style={{
+          position: 'absolute',
+          bottom: 0,
+          right: 0,
+          width: '24px',
+          height: '24px',
+          borderBottom: '2px solid #a5b4fc',
+          borderRight: '2px solid #a5b4fc',
+          borderBottomRightRadius: '8px'
+        }}></div>
         
-        {/* Decorative line - light gray */}
-        <div className="absolute left-6 right-6 top-1.5 border-t border-indigo-200"></div>
-        <div className="absolute left-6 right-6 bottom-1.5 border-t border-indigo-200"></div>
+        <div style={{
+          position: 'absolute',
+          left: '24px',
+          right: '24px',
+          top: '6px',
+          borderTop: '1px solid #c7d2fe'
+        }}></div>
+        <div style={{
+          position: 'absolute',
+          left: '24px',
+          right: '24px',
+          bottom: '6px',
+          borderTop: '1px solid #c7d2fe'
+        }}></div>
         
-        {/* School Name Header - Highlighted with bold and background */}
-        <div className="bg-gradient-to-r from-indigo-100 via-indigo-50 to-indigo-100 px-4 py-1.5 text-center relative border-b-2 border-indigo-300">
-          <div className="absolute left-2 top-1/2 -translate-y-1/2">
-            <Shield size={16} className="text-indigo-700 font-bold" />
-          </div>
-          <div className="absolute right-2 top-1/2 -translate-y-1/2">
-            <Shield size={16} className="text-indigo-700 font-bold" />
-          </div>
-          <div className="text-indigo-900 font-extrabold text-sm tracking-wider">
+        <div style={{
+          backgroundColor: '#e0e7ff',
+          padding: '6px 16px',
+          textAlign: 'center',
+          position: 'relative',
+          borderBottom: '2px solid #a5b4fc'
+        }}>
+          <div style={{
+            position: 'absolute',
+            left: '8px',
+            top: '50%',
+            transform: 'translateY(-50%)',
+            fontSize: '16px'
+          }}>🛡</div>
+          <div style={{
+            position: 'absolute',
+            right: '8px',
+            top: '50%',
+            transform: 'translateY(-50%)',
+            fontSize: '16px'
+          }}>🛡</div>
+          <div style={{
+            color: '#312e81',
+            fontWeight: 900,
+            fontSize: '14px',
+            letterSpacing: '0.05em'
+          }}>
             {schoolInfo.schoolName || 'SCHOOL NAME'}
           </div>
-          <div className="text-indigo-700 font-bold text-[8px] tracking-widest">
+          <div style={{
+            color: '#4338ca',
+            fontWeight: 700,
+            fontSize: '8px',
+            letterSpacing: '0.1em'
+          }}>
             {schoolInfo.schoolAffiliation || 'EST. 1985 • GOVT. RECOGNISED'}
           </div>
         </div>
 
-        {/* Content */}
-        <div className="p-2.5 flex gap-3">
-          {/* Photo with light frame */}
-          <div className="flex-shrink-0 relative">
+        <div style={{
+          padding: '10px',
+          display: 'flex',
+          gap: '12px'
+        }}>
+          <div style={{
+            flexShrink: 0,
+            position: 'relative'
+          }}>
             {image ? (
-              <div className="w-[70px] h-[85px] rounded border-2 border-indigo-300 overflow-hidden shadow-sm">
-                <img src={image} alt="Student" className="w-full h-full object-cover" />
+              <div style={{
+                width: '70px',
+                height: '85px',
+                borderRadius: '4px',
+                border: '2px solid #a5b4fc',
+                overflow: 'hidden',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+              }}>
+                <img src={image} alt="Student" style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover'
+                }} />
               </div>
             ) : (
-              <div className="w-[70px] h-[85px] rounded bg-gradient-to-br from-indigo-100 to-indigo-200 flex items-center justify-center border-2 border-indigo-300 shadow-sm">
-                <span className="text-indigo-700 font-bold text-3xl">
+              <div style={{
+                width: '70px',
+                height: '85px',
+                borderRadius: '4px',
+                backgroundColor: '#e0e7ff',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                border: '2px solid #a5b4fc',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+              }}>
+                <span style={{
+                  color: '#4338ca',
+                  fontWeight: 700,
+                  fontSize: '24px'
+                }}>
                   {name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
                 </span>
               </div>
             )}
-            {/* Blood Group Badge */}
-            <div className="absolute -bottom-1 -right-1 bg-red-500 text-white text-[6px] font-bold px-1.5 py-0.5 rounded-full">
+            <div style={{
+              position: 'absolute',
+              bottom: '-4px',
+              right: '-4px',
+              backgroundColor: '#ef4444',
+              color: '#ffffff',
+              fontSize: '6px',
+              fontWeight: 700,
+              padding: '2px 6px',
+              borderRadius: '9999px'
+            }}>
               {bloodGroup}
             </div>
           </div>
 
-          {/* Details */}
-          <div className="flex-1 min-w-0 space-y-0.5">
-            <h3 className="font-bold text-gray-800 text-base border-b-2 border-indigo-200 pb-0.5">{name}</h3>
+          <div style={{
+            flex: 1,
+            minWidth: 0
+          }}>
+            <h3 style={{
+              fontWeight: 700,
+              color: '#1f2937',
+              fontSize: '16px',
+              borderBottom: '2px solid #c7d2fe',
+              paddingBottom: '2px',
+              marginBottom: '2px'
+            }}>{name}</h3>
             
-            <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-xs">
-              <div className="flex items-baseline gap-1">
-                <span className="text-indigo-700 text-[8px] font-bold uppercase tracking-wider">Father</span>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              gap: '2px 8px',
+              fontSize: '12px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+                <span style={{ color: '#4338ca', fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Father</span>
               </div>
-              <div className="flex items-baseline gap-1">
-                <span className="text-gray-700 text-[9px] font-medium">{fatherName}</span>
-              </div>
-              
-              <div className="flex items-baseline gap-1">
-                <span className="text-indigo-700 text-[8px] font-bold uppercase tracking-wider">Mother</span>
-              </div>
-              <div className="flex items-baseline gap-1">
-                <span className="text-gray-700 text-[9px] font-medium">{motherName}</span>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+                <span style={{ color: '#374151', fontSize: '9px', fontWeight: 500 }}>{fatherName}</span>
               </div>
               
-              <div className="flex items-baseline gap-1">
-                <span className="text-indigo-700 text-[8px] font-bold uppercase tracking-wider">DOB</span>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+                <span style={{ color: '#4338ca', fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Mother</span>
               </div>
-              <div className="flex items-baseline gap-1">
-                <span className="text-gray-700 text-[9px] font-medium">{dob}</span>
-              </div>
-              
-              <div className="flex items-baseline gap-1">
-                <span className="text-indigo-700 text-[8px] font-bold uppercase tracking-wider">Contact</span>
-              </div>
-              <div className="flex items-baseline gap-1">
-                <span className="text-gray-700 text-[9px] font-medium">{phone}</span>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+                <span style={{ color: '#374151', fontSize: '9px', fontWeight: 500 }}>{motherName}</span>
               </div>
               
-              <div className="flex items-baseline gap-1 col-span-2">
-                <span className="text-indigo-700 text-[8px] font-bold uppercase tracking-wider">Address</span>
-                <span className="text-gray-700 text-[8px] truncate font-medium">{address}</span>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+                <span style={{ color: '#4338ca', fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>DOB</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+                <span style={{ color: '#374151', fontSize: '9px', fontWeight: 500 }}>{dob}</span>
               </div>
               
-              <div className="flex items-baseline gap-1 col-span-2">
-                <span className="text-indigo-700 text-[8px] font-bold uppercase tracking-wider">Class</span>
-                <span className="text-gray-800 text-[9px] font-bold">{grade} {section ? `- ${section}` : ''}</span>
-                <span className="text-indigo-700 text-[8px] font-bold uppercase tracking-wider ml-2">Adm. No.</span>
-                <span className="text-gray-800 text-[9px] font-bold">{admissionNo}</span>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+                <span style={{ color: '#4338ca', fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Contact</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+                <span style={{ color: '#374151', fontSize: '9px', fontWeight: 500 }}>{phone}</span>
+              </div>
+              
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px', gridColumn: 'span 2' }}>
+                <span style={{ color: '#4338ca', fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Address</span>
+                <span style={{ color: '#374151', fontSize: '8px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 500 }}>{address}</span>
+              </div>
+              
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px', gridColumn: 'span 2' }}>
+                <span style={{ color: '#4338ca', fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Class</span>
+                <span style={{ color: '#1f2937', fontSize: '9px', fontWeight: 700 }}>{grade} {section ? `- ${section}` : ''}</span>
+                <span style={{ color: '#4338ca', fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginLeft: '8px' }}>Adm. No.</span>
+                <span style={{ color: '#1f2937', fontSize: '9px', fontWeight: 700 }}>{admissionNo}</span>
               </div>
             </div>
           </div>
@@ -612,7 +938,7 @@ const IdCard = () => {
     );
   };
 
-  // DESIGN 2: Modern Vertical - With highlighted school info
+  // DESIGN 2: Modern Vertical - INLINE STYLES ONLY (Portrait: 5.40cm x 8.56cm)
   const renderDesign2 = (student, image) => {
     const basicInfo = student.basicInfo || {};
     const name = basicInfo.name || 'Student Name';
@@ -623,73 +949,188 @@ const IdCard = () => {
     const motherName = basicInfo.motherName || 'N/A';
     const dob = basicInfo.dob || 'N/A';
     const phone = basicInfo.fatherPhone || basicInfo.motherPhone || 'N/A';
-    const address = basicInfo.address || 'N/A';
     const bloodGroup = basicInfo.bloodGroup || 'N/A';
 
     return (
-      <div className="w-[200px] h-[320px] bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden relative font-sans flex flex-col">
-        {/* Top gradient bar */}
-        <div className="h-1.5 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500"></div>
+      <div style={{
+        width: '204px',
+        height: '323px',
+        backgroundColor: '#ffffff',
+        borderRadius: '16px',
+        boxShadow: '0 8px 16px rgba(0,0,0,0.15)',
+        border: '1px solid #f3f4f6',
+        overflow: 'hidden',
+        position: 'relative',
+        fontFamily: 'Arial, sans-serif',
+        display: 'flex',
+        flexDirection: 'column'
+      }}>
+        <div style={{
+          height: '6px',
+          backgroundColor: '#6366f1'
+        }}></div>
         
-        {/* School Header - Highlighted with bold and gradient background */}
-        <div className="px-3 pt-3 pb-2 text-center bg-gradient-to-r from-indigo-100 via-purple-100 to-pink-100 border-b-2 border-indigo-300">
-          <div className="text-[10px] font-extrabold text-indigo-900 uppercase tracking-wider">
+        <div style={{
+          padding: '12px 12px 8px 12px',
+          textAlign: 'center',
+          backgroundColor: '#e0e7ff',
+          borderBottom: '2px solid #a5b4fc'
+        }}>
+          <div style={{
+            fontSize: '10px',
+            fontWeight: 900,
+            color: '#312e81',
+            textTransform: 'uppercase',
+            letterSpacing: '0.05em'
+          }}>
             {schoolInfo.schoolName || 'SCHOOL NAME'}
           </div>
-          <div className="text-[6px] font-bold text-indigo-700 uppercase tracking-widest mt-0.5">
+          <div style={{
+            fontSize: '6px',
+            fontWeight: 700,
+            color: '#4338ca',
+            textTransform: 'uppercase',
+            letterSpacing: '0.1em',
+            marginTop: '2px'
+          }}>
             {schoolInfo.schoolAffiliation || 'EDUCATION FOR ALL'}
           </div>
         </div>
 
-        {/* Photo - Centered */}
-        <div className="flex justify-center pt-2 pb-1">
-          <div className="relative">
+        <div style={{
+          display: 'flex',
+          justifyContent: 'center',
+          paddingTop: '8px',
+          paddingBottom: '4px'
+        }}>
+          <div style={{
+            position: 'relative'
+          }}>
             {image ? (
-              <div className="w-[75px] h-[95px] rounded-xl border-2 border-indigo-300 overflow-hidden shadow-sm bg-white">
-                <img src={image} alt="Student" className="w-full h-full object-cover" />
+              <div style={{
+                width: '75px',
+                height: '95px',
+                borderRadius: '12px',
+                border: '2px solid #a5b4fc',
+                overflow: 'hidden',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                backgroundColor: '#ffffff'
+              }}>
+                <img src={image} alt="Student" style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover'
+                }} />
               </div>
             ) : (
-              <div className="w-[75px] h-[95px] rounded-xl bg-gradient-to-br from-indigo-100 to-purple-100 flex items-center justify-center border-2 border-indigo-300 shadow-sm">
-                <span className="text-indigo-700 font-bold text-2xl">
+              <div style={{
+                width: '75px',
+                height: '95px',
+                borderRadius: '12px',
+                backgroundColor: '#e0e7ff',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                border: '2px solid #a5b4fc',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+              }}>
+                <span style={{
+                  color: '#4338ca',
+                  fontWeight: 700,
+                  fontSize: '20px'
+                }}>
                   {name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
                 </span>
               </div>
             )}
-            {/* Blood Group Badge */}
-            <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-red-500 text-white text-[6px] font-bold px-1.5 py-0.5 rounded-full">
+            <div style={{
+              position: 'absolute',
+              bottom: '-4px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              backgroundColor: '#ef4444',
+              color: '#ffffff',
+              fontSize: '6px',
+              fontWeight: 700,
+              padding: '2px 6px',
+              borderRadius: '9999px'
+            }}>
               {bloodGroup}
             </div>
           </div>
         </div>
 
-        {/* Student Name */}
-        <div className="text-center mt-1">
-          <h3 className="font-bold text-gray-800 text-sm leading-tight">{name}</h3>
-          <div className="text-[7px] text-indigo-600 font-bold">#{admissionNo}</div>
+        <div style={{
+          textAlign: 'center',
+          marginTop: '4px'
+        }}>
+          <h3 style={{
+            fontWeight: 700,
+            color: '#1f2937',
+            fontSize: '14px',
+            lineHeight: '1.2',
+            margin: 0
+          }}>{name}</h3>
+          <div style={{
+            fontSize: '7px',
+            color: '#4f46e5',
+            fontWeight: 700
+          }}>#{admissionNo}</div>
         </div>
 
-        {/* Details in compact grid */}
-        <div className="px-3 py-1.5 flex-1">
-          <div className="space-y-0.5 text-[8px]">
-            <div className="flex justify-between border-b border-indigo-100 pb-0.5">
-              <span className="text-indigo-700 font-bold">Father</span>
-              <span className="text-gray-700 font-medium truncate max-w-[90px]">{fatherName}</span>
+        <div style={{
+          padding: '6px 12px',
+          flex: 1
+        }}>
+          <div style={{
+            fontSize: '8px'
+          }}>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              borderBottom: '1px solid #e0e7ff',
+              paddingBottom: '2px',
+              marginBottom: '2px'
+            }}>
+              <span style={{ color: '#4338ca', fontWeight: 700 }}>Father</span>
+              <span style={{ color: '#374151', fontWeight: 500, maxWidth: '90px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{fatherName}</span>
             </div>
-            <div className="flex justify-between border-b border-indigo-100 pb-0.5">
-              <span className="text-indigo-700 font-bold">Mother</span>
-              <span className="text-gray-700 font-medium truncate max-w-[90px]">{motherName}</span>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              borderBottom: '1px solid #e0e7ff',
+              paddingBottom: '2px',
+              marginBottom: '2px'
+            }}>
+              <span style={{ color: '#4338ca', fontWeight: 700 }}>Mother</span>
+              <span style={{ color: '#374151', fontWeight: 500, maxWidth: '90px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{motherName}</span>
             </div>
-            <div className="flex justify-between border-b border-indigo-100 pb-0.5">
-              <span className="text-indigo-700 font-bold">DOB</span>
-              <span className="text-gray-700 font-medium">{dob}</span>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              borderBottom: '1px solid #e0e7ff',
+              paddingBottom: '2px',
+              marginBottom: '2px'
+            }}>
+              <span style={{ color: '#4338ca', fontWeight: 700 }}>DOB</span>
+              <span style={{ color: '#374151', fontWeight: 500 }}>{dob}</span>
             </div>
-            <div className="flex justify-between border-b border-indigo-100 pb-0.5">
-              <span className="text-indigo-700 font-bold">Class</span>
-              <span className="text-gray-800 font-bold">{grade} {section ? `- ${section}` : ''}</span>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              borderBottom: '1px solid #e0e7ff',
+              paddingBottom: '2px',
+              marginBottom: '2px'
+            }}>
+              <span style={{ color: '#4338ca', fontWeight: 700 }}>Class</span>
+              <span style={{ color: '#1f2937', fontWeight: 700 }}>{grade} {section ? `- ${section}` : ''}</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-indigo-700 font-bold">Contact</span>
-              <span className="text-gray-700 font-medium">{phone}</span>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between'
+            }}>
+              <span style={{ color: '#4338ca', fontWeight: 700 }}>Contact</span>
+              <span style={{ color: '#374151', fontWeight: 500 }}>{phone}</span>
             </div>
           </div>
         </div>
@@ -697,7 +1138,7 @@ const IdCard = () => {
     );
   };
 
-  // DESIGN 3: Premium Split - Vertical text from bottom to top, highlighted school info
+  // DESIGN 3: Premium Split - INLINE STYLES ONLY (Portrait: 5.40cm x 8.56cm)
   const renderDesign3 = (student, image) => {
     const basicInfo = student.basicInfo || {};
 
@@ -711,34 +1152,53 @@ const IdCard = () => {
 
     return (
       <div
-        className="w-[200px] h-[320px] bg-white border border-black overflow-hidden flex"
         style={{
-          fontFamily: 'Arial, sans-serif',
+          width: '204px',
+          height: '323px',
+          backgroundColor: '#ffffff',
+          border: '1px solid #968d8d',
+          overflow: 'hidden',
+          display: 'flex',
+          fontFamily: 'Arial, sans-serif'
         }}
       >
-        {/* LEFT SIDEBAR - With Background Color */}
         <div
-          className="w-[55px] h-full flex-shrink-0 flex items-center justify-center border-r border-black"
           style={{
-            background: 'linear-gradient(180deg, #1a1a2e, #16213e, #0f3460)',
+            width: '55px',
+            height: '100%',
+            flexShrink: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRight: '1px solid #000000',
+            backgroundColor: '#1a1a2e'
           }}
         >
           <div
-            className="flex flex-col items-center justify-center text-white"
             style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#ffffff',
               writingMode: 'vertical-rl',
               transform: 'rotate(180deg)',
               whiteSpace: 'nowrap',
-              lineHeight: '1.5',
+              lineHeight: '1.5'
             }}
           >
-            {/* School Name - Highlighted with larger font and bold */}
-            <span className="font-black text-[13px] tracking-wider">
+            <span style={{
+              fontWeight: 900,
+              fontSize: '13px',
+              letterSpacing: '0.05em'
+            }}>
               {schoolInfo.schoolName || 'ABC SCHOOL'}
             </span>
-
-            {/* Address, Contact, Email in straight line with " || " */}
-            <span className="text-[7px] opacity-80 mt-1">
+            <span style={{
+              fontSize: '7px',
+              opacity: 0.8,
+              marginTop: '4px'
+            }}>
               {schoolInfo.schoolAddress || 'Address'} 
               {' || '}
               {schoolInfo.schoolPhone || 'Phone'} 
@@ -748,60 +1208,101 @@ const IdCard = () => {
           </div>
         </div>
 
-        {/* RIGHT CONTENT - Centered */}
-        <div className="flex-1 flex flex-col items-center justify-center bg-white px-2">
-          
-          {/* STUDENT IMAGE - Centered */}
-          <div className="relative">
-            <div className="w-[70px] h-[85px] border border-black overflow-hidden">
+        <div style={{
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: '#ffffff',
+          padding: '0 8px'
+        }}>
+          <div style={{
+            position: 'relative'
+          }}>
+            <div style={{
+              width: '70px',
+              height: '85px',
+              border: '1px solid #000000',
+              overflow: 'hidden',
+              backgroundColor: '#ffffff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
               {image ? (
                 <img
                   src={image}
                   alt="Student"
-                  className="w-full h-full object-cover"
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover'
+                  }}
                 />
               ) : (
-                <div className="w-full h-full flex items-center justify-center text-[10px] text-gray-500">
+                <div style={{
+                  fontSize: '10px',
+                  color: '#6b7280'
+                }}>
                   Image
                 </div>
               )}
             </div>
-            {/* Blood Group Badge */}
             {bloodGroup && bloodGroup !== 'N/A' && (
-              <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-red-500 text-white text-[6px] font-bold px-1.5 py-0.5 rounded-full">
+              <div style={{
+                position: 'absolute',
+                bottom: '-4px',
+                left: '50%',
+                transform: 'translateX(-50%)',
+                backgroundColor: '#ef4444',
+                color: '#ffffff',
+                fontSize: '6px',
+                fontWeight: 700,
+                padding: '2px 6px',
+                borderRadius: '9999px'
+              }}>
                 {bloodGroup}
               </div>
             )}
           </div>
 
-          {/* STUDENT DETAILS - Centered, No Labels */}
-          <div className="mt-[12px] text-center space-y-[3px]">
-            
-            {/* Name */}
-            <div className="text-[11px] font-bold text-black">
+          <div style={{
+            marginTop: '12px',
+            textAlign: 'center'
+          }}>
+            <div style={{
+              fontSize: '11px',
+              fontWeight: 700,
+              color: '#000000'
+            }}>
               {name}
             </div>
-
-            {/* Class - Section */}
-            <div className="text-[10px] text-gray-800">
+            <div style={{
+              fontSize: '10px',
+              color: '#1f2937'
+            }}>
               {grade} {section ? `- ${section}` : ''}
             </div>
-
-            {/* Phone */}
-            <div className="text-[9px] text-gray-700">
+            <div style={{
+              fontSize: '9px',
+              color: '#374151'
+            }}>
               {phone}
             </div>
-
-            {/* DOB */}
-            <div className="text-[9px] text-gray-700">
+            <div style={{
+              fontSize: '9px',
+              color: '#374151'
+            }}>
               {dob}
             </div>
-
-            {/* Admission No */}
-            <div className="text-[8px] text-gray-500 mt-1">
+            <div style={{
+              fontSize: '8px',
+              color: '#6b7280',
+              marginTop: '4px'
+            }}>
               ID: {admissionNo}
             </div>
-
           </div>
         </div>
       </div>
@@ -1076,8 +1577,7 @@ const IdCard = () => {
                             >
                               <Edit size={18} />
                             </button>
-                            <button
-                              onClick={() => {
+                            <button                              onClick={() => {
                                 if (window.confirm('Are you sure you want to delete this student?')) {
                                   toast.info('Delete functionality will be implemented');
                                 }
@@ -1226,18 +1726,6 @@ const IdCard = () => {
               
               <div className="flex gap-3 mt-6 w-full max-w-md">
                 <button
-                  onClick={downloadSinglePDF}
-                  disabled={isGenerating || isUploading}
-                  className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center justify-center gap-2 disabled:opacity-50"
-                >
-                  {isGenerating ? (
-                    <Loader className="animate-spin" size={18} />
-                  ) : (
-                    <Download size={18} />
-                  )}
-                  <span>{isGenerating ? 'Generating...' : 'Download PDF'}</span>
-                </button>
-                <button
                   onClick={printSingleCard}
                   className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center justify-center gap-2"
                 >
@@ -1312,18 +1800,6 @@ const IdCard = () => {
               </div>
 
               <div className="flex gap-3 mt-6 w-full max-w-md">
-                <button
-                  onClick={downloadBulkPDF}
-                  disabled={isGenerating}
-                  className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center justify-center gap-2 disabled:opacity-50"
-                >
-                  {isGenerating ? (
-                    <Loader className="animate-spin" size={18} />
-                  ) : (
-                    <Download size={18} />
-                  )}
-                  <span>{isGenerating ? 'Generating...' : 'Download All PDF'}</span>
-                </button>
                 <button
                   onClick={printBulkCards}
                   className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center justify-center gap-2"
