@@ -543,6 +543,168 @@ class TeacherApi {
       throw error;
     }
   }
+  // Add to src/service/TeacherApi.js
+
+/**
+ * Upload teacher photo for ID card
+ * @param {string} teacherId 
+ * @param {File} file 
+ * @returns {Promise<{success: boolean, photoUrl?: string, error?: string}>}
+ */
+static async uploadTeacherPhoto(teacherId, file) {
+  try {
+    const user = auth.currentUser;
+    if (!user) throw new Error('No authenticated user');
+    const token = await user.getIdToken(true);
+
+    const formData = new FormData();
+    formData.append('photo', file);
+
+    const response = await fetch(`${BASE_URL}/teachers/${teacherId}/photo`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      body: formData,
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || !data.success) {
+      throw new Error(data.error || 'Failed to upload photo');
+    }
+
+    return {
+      success: true,
+      photoUrl: data.photoUrl
+    };
+  } catch (error) {
+    console.error('Upload teacher photo error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Get teacher photo
+ * @param {string} teacherId 
+ * @returns {Promise<{success: boolean, photoUrl?: string, error?: string}>}
+ */
+static async getTeacherPhoto(teacherId) {
+  try {
+    const headers = await this.getAuthHeader();
+    const response = await fetch(`${BASE_URL}/teachers/${teacherId}/photo`, {
+      method: 'GET',
+      headers,
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || !data.success) {
+      throw new Error(data.error || 'Failed to get photo');
+    }
+
+    return {
+      success: true,
+      photoUrl: data.photoUrl
+    };
+  } catch (error) {
+    console.error('Get teacher photo error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Delete teacher photo
+ * @param {string} teacherId 
+ * @returns {Promise<{success: boolean, message?: string, error?: string}>}
+ */
+static async deleteTeacherPhoto(teacherId) {
+  try {
+    const headers = await this.getAuthHeader();
+    const response = await fetch(`${BASE_URL}/teachers/${teacherId}/photo`, {
+      method: 'DELETE',
+      headers,
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || !data.success) {
+      throw new Error(data.error || 'Failed to delete photo');
+    }
+
+    return data;
+  } catch (error) {
+    console.error('Delete teacher photo error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+
+/**
+ * Get teacher photo as base64
+ * @param {string} teacherId 
+ * @returns {Promise<{success: boolean, photoData?: string, error?: string}>}
+ */
+static async getTeacherPhotoBase64(teacherId) {
+  try {
+    const headers = await this.getAuthHeader();
+    const response = await fetch(`${BASE_URL}/teachers/${teacherId}/photo/base64`, {
+      method: 'GET',
+      headers,
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || !data.success) {
+      throw new Error(data.error || 'Failed to get photo');
+    }
+
+    return {
+      success: true,
+      photoData: data.photoData
+    };
+  } catch (error) {
+    console.error('Get teacher photo base64 error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Bulk upload teacher photos
+ * @param {Array} files - Array of { teacherId, file }
+ * @returns {Promise<{success: boolean, results?: Array, errors?: Array, error?: string}>}
+ */
+static async bulkUploadTeacherPhotos(files) {
+  try {
+    const user = auth.currentUser;
+    if (!user) throw new Error('No authenticated user');
+    const token = await user.getIdToken(true);
+
+    const formData = new FormData();
+    files.forEach(({ teacherId, file }) => {
+      formData.append('photos', file, `${teacherId}.jpg`);
+    });
+
+    const response = await fetch(`${BASE_URL}/teachers/photos/bulk`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      body: formData,
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || !data.success) {
+      throw new Error(data.error || 'Failed to upload photos');
+    }
+
+    return data;
+  } catch (error) {
+    console.error('Bulk upload teacher photos error:', error);
+    return { success: false, error: error.message };
+  }
+}
 }
 
 export default TeacherApi;
