@@ -1,10 +1,10 @@
 // src/pages/IdCard.jsx
 import React, { useState, useEffect, useRef } from 'react';
-import { 
+import {
   Search, Download, Printer, X, Loader, Users, User, School, MapPin, Phone, Mail,
   Calendar, UserCheck, FileText, Eye, RefreshCw, ChevronLeft, ChevronRight, Camera,
   Upload, Palette, Layout, Star, Award, BookOpen, GraduationCap, Shield, CreditCard,
-  Fingerprint, BadgeCheck, QrCode, Heart, Home, User2, Building2, Hash, Edit, Trash2, 
+  Fingerprint, BadgeCheck, QrCode, Heart, Home, User2, Building2, Hash, Edit, Trash2,
   CheckCircle, Clock, MoreVertical, Briefcase, Book
 } from 'lucide-react';
 import { toast } from 'react-toastify';
@@ -48,7 +48,7 @@ const IdCard = () => {
     schoolPhone: ''
   });
   const [selectedDesign, setSelectedDesign] = useState('design1');
-  
+
   // Refs
   const cardRef = useRef(null);
   const studentFileInputRef = useRef(null);
@@ -104,8 +104,8 @@ const IdCard = () => {
 
   // Apply filters
   useEffect(() => {
-    if (searchTerm.trim() || (cardType === 'student' && (selectedGrade || selectedSection)) || 
-        (cardType === 'teacher' && (selectedSubject || selectedDesignation))) {
+    if (searchTerm.trim() || (cardType === 'student' && (selectedGrade || selectedSection)) ||
+      (cardType === 'teacher' && (selectedSubject || selectedDesignation))) {
       applyFilters();
       setHasSearched(true);
     } else {
@@ -168,6 +168,7 @@ const IdCard = () => {
             joiningDate: teacher.joiningDate || teacher.dateOfJoining || '',
             photoUrl: teacher.photoUrl || teacher.basicInfo?.photoUrl || null,
             classesAssigned: teacher.classesAssigned || [],
+             employeeId: teacher.employeeId || teacher.teacherId || '',
           }
         }));
         setTeachers(normalized);
@@ -202,7 +203,7 @@ const IdCard = () => {
 
       if (searchTerm.trim()) {
         const term = searchTerm.toLowerCase().trim();
-        filtered = filtered.filter(student => 
+        filtered = filtered.filter(student =>
           student.basicInfo?.name?.toLowerCase().includes(term) ||
           student.basicInfo?.admissionNo?.toLowerCase().includes(term) ||
           student.basicInfo?.fatherName?.toLowerCase().includes(term) ||
@@ -211,13 +212,13 @@ const IdCard = () => {
       }
 
       if (selectedGrade) {
-        filtered = filtered.filter(student => 
+        filtered = filtered.filter(student =>
           student.basicInfo?.grade === selectedGrade
         );
       }
 
       if (selectedSection) {
-        filtered = filtered.filter(student => 
+        filtered = filtered.filter(student =>
           student.basicInfo?.section === selectedSection
         );
       }
@@ -228,7 +229,7 @@ const IdCard = () => {
 
       if (searchTerm.trim()) {
         const term = searchTerm.toLowerCase().trim();
-        filtered = filtered.filter(teacher => 
+        filtered = filtered.filter(teacher =>
           teacher.basicInfo?.name?.toLowerCase().includes(term) ||
           teacher.basicInfo?.employeeId?.toLowerCase().includes(term) ||
           teacher.basicInfo?.phone?.includes(term) ||
@@ -237,14 +238,14 @@ const IdCard = () => {
       }
 
       if (selectedSubject) {
-        filtered = filtered.filter(teacher => 
+        filtered = filtered.filter(teacher =>
           teacher.basicInfo?.subjects?.includes(selectedSubject) ||
           teacher.basicInfo?.subject === selectedSubject
         );
       }
 
       if (selectedDesignation) {
-        filtered = filtered.filter(teacher => 
+        filtered = filtered.filter(teacher =>
           teacher.basicInfo?.designation === selectedDesignation
         );
       }
@@ -255,7 +256,7 @@ const IdCard = () => {
 
   const handleSearch = () => {
     if (searchTerm.trim() || (cardType === 'student' && (selectedGrade || selectedSection)) ||
-        (cardType === 'teacher' && (selectedSubject || selectedDesignation))) {
+      (cardType === 'teacher' && (selectedSubject || selectedDesignation))) {
       applyFilters();
       setHasSearched(true);
     } else {
@@ -283,7 +284,7 @@ const IdCard = () => {
   // Get unique values for filters
   const grades = [...new Set(students.map(s => s.basicInfo?.grade).filter(Boolean))].sort();
   const sections = [...new Set(students.map(s => s.basicInfo?.section).filter(Boolean))].sort();
-  const subjects = [...new Set(teachers.flatMap(t => 
+  const subjects = [...new Set(teachers.flatMap(t =>
     t.basicInfo?.subjects || (t.basicInfo?.subject ? [t.basicInfo.subject] : [])
   ).filter(Boolean))].sort();
   const designations = [...new Set(teachers.map(t => t.basicInfo?.designation).filter(Boolean))].sort();
@@ -349,8 +350,8 @@ const IdCard = () => {
     if (selectedTeacher) {
       const photoUrl = await uploadTeacherPhotoToServer(selectedTeacher.teacherId, file);
       if (photoUrl) {
-        setTeachers(prev => prev.map(t => 
-          t.teacherId === selectedTeacher.teacherId 
+        setTeachers(prev => prev.map(t =>
+          t.teacherId === selectedTeacher.teacherId
             ? { ...t, basicInfo: { ...t.basicInfo, photoUrl: photoUrl } }
             : t
         ));
@@ -389,8 +390,8 @@ const IdCard = () => {
     if (selectedStudent) {
       const photoUrl = await uploadStudentPhotoToServer(selectedStudent.studentId, file);
       if (photoUrl) {
-        setStudents(prev => prev.map(s => 
-          s.studentId === selectedStudent.studentId 
+        setStudents(prev => prev.map(s =>
+          s.studentId === selectedStudent.studentId
             ? { ...s, basicInfo: { ...s.basicInfo, photoUrl: photoUrl } }
             : s
         ));
@@ -405,18 +406,18 @@ const IdCard = () => {
 
   const deleteStudentPhoto = async () => {
     if (!selectedStudent) return;
-    
+
     if (!window.confirm('Are you sure you want to delete this photo?')) return;
-    
+
     try {
       const result = await StudentApi.deleteStudentPhoto(selectedStudent.studentId);
       if (result.success) {
         setStudentImage(null);
         setStudentImageFile(null);
         toast.success('Photo deleted successfully');
-        
-        setStudents(prev => prev.map(s => 
-          s.studentId === selectedStudent.studentId 
+
+        setStudents(prev => prev.map(s =>
+          s.studentId === selectedStudent.studentId
             ? { ...s, basicInfo: { ...s.basicInfo, photoUrl: null } }
             : s
         ));
@@ -424,7 +425,7 @@ const IdCard = () => {
           ...prev,
           basicInfo: { ...prev.basicInfo, photoUrl: null }
         }));
-        
+
         setGeneratedCards(prev => prev.map(gc =>
           gc.studentId === selectedStudent.studentId
             ? { ...gc, basicInfo: { ...gc.basicInfo, photoUrl: null } }
@@ -441,18 +442,18 @@ const IdCard = () => {
 
   const deleteTeacherPhoto = async () => {
     if (!selectedTeacher) return;
-    
+
     if (!window.confirm('Are you sure you want to delete this photo?')) return;
-    
+
     try {
       const result = await TeacherApi.deleteTeacherPhoto(selectedTeacher.teacherId);
       if (result.success) {
         setTeacherImage(null);
         setTeacherImageFile(null);
         toast.success('Photo deleted successfully');
-        
-        setTeachers(prev => prev.map(t => 
-          t.teacherId === selectedTeacher.teacherId 
+
+        setTeachers(prev => prev.map(t =>
+          t.teacherId === selectedTeacher.teacherId
             ? { ...t, basicInfo: { ...t.basicInfo, photoUrl: null } }
             : t
         ));
@@ -460,7 +461,7 @@ const IdCard = () => {
           ...prev,
           basicInfo: { ...prev.basicInfo, photoUrl: null }
         }));
-        
+
         setGeneratedCards(prev => prev.map(gc =>
           gc.teacherId === selectedTeacher.teacherId
             ? { ...gc, basicInfo: { ...gc.basicInfo, photoUrl: null } }
@@ -489,21 +490,21 @@ const IdCard = () => {
     }
   };
 
- const getTeacherPhotoBase64 = async (teacherId) => {
-  console.log('📸 getTeacherPhotoBase64 called for teacherId:', teacherId);
-  try {
-    const result = await TeacherApi.getTeacherPhotoBase64(teacherId);
-    console.log('📸 API response:', result);
-    if (result.success && result.photoData) {
-      return result.photoData;
+  const getTeacherPhotoBase64 = async (teacherId) => {
+    console.log('📸 getTeacherPhotoBase64 called for teacherId:', teacherId);
+    try {
+      const result = await TeacherApi.getTeacherPhotoBase64(teacherId);
+      console.log('📸 API response:', result);
+      if (result.success && result.photoData) {
+        return result.photoData;
+      }
+      console.warn('⚠️ API returned no photoData:', result.error);
+      return null;
+    } catch (error) {
+      console.error('❌ Error getting teacher photo base64:', error);
+      return null;
     }
-    console.warn('⚠️ API returned no photoData:', result.error);
-    return null;
-  } catch (error) {
-    console.error('❌ Error getting teacher photo base64:', error);
-    return null;
-  }
-};
+  };
 
   const getPhotoBase64 = async (person) => {
     if (person.type === 'student') {
@@ -515,46 +516,46 @@ const IdCard = () => {
 
   // ============ CARD GENERATION ============
   const generateSingleCard = async (person) => {
-  console.log('🔍 generateSingleCard called for:', person.basicInfo?.name);
-  console.log('📋 person.basicInfo.photoUrl:', person.basicInfo?.photoUrl);
-  console.log('📋 person.type:', person.type);
-  
-  if (cardType === 'student') {
-    setSelectedStudent(person);
-  } else {
-    setSelectedTeacher(person);
-  }
-  
-  setPreviewScale(1);
-  setShowPreview(true);
-  
-  let imageDataUrl = person.basicInfo?.photoUrl || null;
-  
-  if (imageDataUrl && !imageDataUrl.startsWith('data:image')) {
-    console.log('🌐 Fetching base64 from API...');
-    try {
-      const base64 = await getPhotoBase64(person);
-      console.log('✅ Base64 received:', base64 ? `${base64.substring(0, 50)}... (length: ${base64?.length})` : 'NULL');
-      if (base64) {
-        imageDataUrl = base64;
-      }
-    } catch (err) {
-      console.error('❌ Failed to load photo as base64:', err);
+    console.log('🔍 generateSingleCard called for:', person.basicInfo?.name);
+    console.log('📋 person.basicInfo.photoUrl:', person.basicInfo?.photoUrl);
+    console.log('📋 person.type:', person.type);
+
+    if (cardType === 'student') {
+      setSelectedStudent(person);
+    } else {
+      setSelectedTeacher(person);
     }
-  } else {
-    console.log('ℹ️ Using existing image data:', imageDataUrl ? 'already base64 or null' : 'null');
-  }
-  
-  console.log(' Final imageDataUrl:', imageDataUrl ? `${imageDataUrl.substring(0, 50)}...` : 'NULL');
-  
-  if (cardType === 'student') {
-    setStudentImage(imageDataUrl);
-    setStudentImageFile(null);
-  } else {
-    setTeacherImage(imageDataUrl);
-    setTeacherImageFile(null);
-  }
-};
+
+    setPreviewScale(1);
+    setShowPreview(true);
+
+    let imageDataUrl = person.basicInfo?.photoUrl || null;
+
+    if (imageDataUrl && !imageDataUrl.startsWith('data:image')) {
+      console.log('🌐 Fetching base64 from API...');
+      try {
+        const base64 = await getPhotoBase64(person);
+        console.log('✅ Base64 received:', base64 ? `${base64.substring(0, 50)}... (length: ${base64?.length})` : 'NULL');
+        if (base64) {
+          imageDataUrl = base64;
+        }
+      } catch (err) {
+        console.error('❌ Failed to load photo as base64:', err);
+      }
+    } else {
+      console.log('ℹ️ Using existing image data:', imageDataUrl ? 'already base64 or null' : 'null');
+    }
+
+    console.log(' Final imageDataUrl:', imageDataUrl ? `${imageDataUrl.substring(0, 50)}...` : 'NULL');
+
+    if (cardType === 'student') {
+      setStudentImage(imageDataUrl);
+      setStudentImageFile(null);
+    } else {
+      setTeacherImage(imageDataUrl);
+      setTeacherImageFile(null);
+    }
+  };
 
   const generateBulkCards = async () => {
     const data = cardType === 'student' ? filteredStudents : filteredTeachers;
@@ -562,14 +563,14 @@ const IdCard = () => {
       toast.error(`No ${cardType}s to generate ID cards`);
       return;
     }
-    
+
     const loadingToast = toast.loading(`Loading ${data.length} photos...`);
-    
+
     try {
       const cardsWithImages = await Promise.all(
         data.map(async (person) => {
           let imageDataUrl = person.basicInfo?.photoUrl || null;
-          
+
           if (imageDataUrl && !imageDataUrl.startsWith('data:image')) {
             try {
               const base64 = await getPhotoBase64(person);
@@ -580,7 +581,7 @@ const IdCard = () => {
               console.warn(`Failed to load photo for ${person.basicInfo?.name}:`, err);
             }
           }
-          
+
           return {
             ...person,
             basicInfo: {
@@ -590,7 +591,7 @@ const IdCard = () => {
           };
         })
       );
-      
+
       setGeneratedCards(cardsWithImages);
       setCurrentCardIndex(0);
       setShowBulkPreview(true);
@@ -644,7 +645,7 @@ const IdCard = () => {
       } else {
         setTeacherImage(imageDataUrl);
       }
-      
+
       // Wait for React to re-render
       await new Promise(resolve => setTimeout(resolve, 300));
 
@@ -656,11 +657,11 @@ const IdCard = () => {
       }
 
       const htmlContent = element.outerHTML;
-      
+
       const isLandscape = selectedDesign === 'design1';
       const cardWidth = isLandscape ? '323px' : '204px';
       const cardHeight = isLandscape ? '204px' : '323px';
-      
+
       printWindow.document.open();
       printWindow.document.write(`
         <!DOCTYPE html>
@@ -700,10 +701,10 @@ const IdCard = () => {
         </body>
         </html>
       `);
-      
+
       printWindow.document.close();
       printWindow.focus();
-      
+
     } catch (error) {
       console.error('Print error:', error);
       toast.error('Failed to prepare print');
@@ -742,7 +743,7 @@ const IdCard = () => {
       const cardsWithImages = await Promise.all(
         generatedCards.map(async (person) => {
           let imageDataUrl = person.basicInfo?.photoUrl || null;
-          
+
           if (imageDataUrl && !imageDataUrl.startsWith('data:image')) {
             try {
               const base64 = await getPhotoBase64(person);
@@ -753,7 +754,7 @@ const IdCard = () => {
               console.warn(`Failed to load photo for ${person.basicInfo?.name}:`, err);
             }
           }
-          
+
           return { person, imageDataUrl };
         })
       );
@@ -812,9 +813,9 @@ const IdCard = () => {
         </body>
         </html>
       `);
-      
+
       printWindow.document.close();
-      
+
     } catch (error) {
       console.error('Bulk print error:', error);
       toast.error('Failed to load photos for printing');
@@ -828,8 +829,8 @@ const IdCard = () => {
     const isTeacher = type === 'teacher';
 
     const name = basicInfo.name || (isTeacher ? 'Teacher Name' : 'Student Name');
-    const id = isTeacher 
-      ? (basicInfo.employeeId || 'N/A') 
+    const id = isTeacher
+      ? (basicInfo.employeeId || 'N/A')
       : (basicInfo.admissionNo || 'N/A');
     const grade = basicInfo.grade || 'N/A';
     const section = basicInfo.section || 'N/A';
@@ -857,8 +858,8 @@ const IdCard = () => {
           </div>
           <div style="display:flex;justify-content:center;padding-top:8px;padding-bottom:4px;">
             <div style="position:relative;">
-              ${image ? `<div style="width:75px;height:95px;border-radius:12px;border:2px solid ${isTeacher ? '#6ee7b7' : '#a5b4fc'};overflow:hidden;background:#ffffff;"><img src="${image}" style="width:100%;height:100%;object-fit:cover;" /></div>` : 
-                `<div style="width:75px;height:95px;border-radius:12px;background:${isTeacher ? '#d1fae5' : '#e0e7ff'};display:flex;align-items:center;justify-content:center;border:2px solid ${isTeacher ? '#6ee7b7' : '#a5b4fc'};"><span style="color:${isTeacher ? '#047857' : '#4338ca'};font-weight:700;font-size:20px;">${name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}</span></div>`}
+              ${image ? `<div style="width:75px;height:95px;border-radius:12px;border:2px solid ${isTeacher ? '#6ee7b7' : '#a5b4fc'};overflow:hidden;background:#ffffff;"><img src="${image}" style="width:100%;height:100%;object-fit:cover;" /></div>` :
+          `<div style="width:75px;height:95px;border-radius:12px;background:${isTeacher ? '#d1fae5' : '#e0e7ff'};display:flex;align-items:center;justify-content:center;border:2px solid ${isTeacher ? '#6ee7b7' : '#a5b4fc'};"><span style="color:${isTeacher ? '#047857' : '#4338ca'};font-weight:700;font-size:20px;">${name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}</span></div>`}
               <div style="position:absolute;bottom:-4px;left:50%;transform:translateX(-50%);background:#ef4444;color:#ffffff;font-size:6px;font-weight:700;padding:2px 6px;border-radius:9999px;">${bloodGroup}</div>
             </div>
           </div>
@@ -931,15 +932,15 @@ const IdCard = () => {
         </div>
         <div style="padding:10px;display:flex;gap:12px;">
           <div style="flex-shrink:0;position:relative;">
-            ${image ? `<div style="width:70px;height:85px;border-radius:4px;border:2px solid ${isTeacher ? '#6ee7b7' : '#a5b4fc'};overflow:hidden;"><img src="${image}" style="width:100%;height:100%;object-fit:cover;" /></div>` : 
-              `<div style="width:70px;height:85px;border-radius:4px;background:${isTeacher ? '#d1fae5' : '#e0e7ff'};display:flex;align-items:center;justify-content:center;border:2px solid ${isTeacher ? '#6ee7b7' : '#a5b4fc'};"><span style="color:${isTeacher ? '#047857' : '#4338ca'};font-weight:700;font-size:24px;">${name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}</span></div>`}
+            ${image ? `<div style="width:70px;height:85px;border-radius:4px;border:2px solid ${isTeacher ? '#6ee7b7' : '#a5b4fc'};overflow:hidden;"><img src="${image}" style="width:100%;height:100%;object-fit:cover;" /></div>` :
+        `<div style="width:70px;height:85px;border-radius:4px;background:${isTeacher ? '#d1fae5' : '#e0e7ff'};display:flex;align-items:center;justify-content:center;border:2px solid ${isTeacher ? '#6ee7b7' : '#a5b4fc'};"><span style="color:${isTeacher ? '#047857' : '#4338ca'};font-weight:700;font-size:24px;">${name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}</span></div>`}
             <div style="position:absolute;bottom:-4px;right:-4px;background:#ef4444;color:#ffffff;font-size:6px;font-weight:700;padding:2px 6px;border-radius:9999px;">${bloodGroup}</div>
           </div>
           <div style="flex:1;min-width:0;">
             <div style="font-weight:700;color:#1f2937;font-size:16px;border-bottom:2px solid ${isTeacher ? '#a7f3d0' : '#c7d2fe'};padding-bottom:2px;margin-bottom:2px;">${name}</div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 8px;font-size:12px;">
               ${isTeacher ? `
-                <div style="display:flex;align-items:baseline;gap:4px;"><span style="color:#047857;font-size:8px;font-weight:700;text-transform:uppercase;">Employee ID</span></div>
+                <div style="display:flex;align-items:baseline;gap:4px;"><span style="color:#047857;font-size:8px;font-weight:700;text-transform:uppercase;">ID</span></div>
                 <div style="display:flex;align-items:baseline;gap:4px;"><span style="color:#374151;font-size:9px;font-weight:500;">${id}</span></div>
                 <div style="display:flex;align-items:baseline;gap:4px;"><span style="color:#047857;font-size:8px;font-weight:700;text-transform:uppercase;">Designation</span></div>
                 <div style="display:flex;align-items:baseline;gap:4px;"><span style="color:#374151;font-size:9px;font-weight:500;">${designation}</span></div>
@@ -971,10 +972,10 @@ const IdCard = () => {
   const renderDesign1 = (person, image, type) => {
     const basicInfo = person.basicInfo || {};
     const isTeacher = type === 'teacher';
-    
+
     const name = basicInfo.name || (isTeacher ? 'Teacher Name' : 'Student Name');
-    const id = isTeacher 
-      ? (basicInfo.employeeId || 'N/A') 
+    const id = isTeacher
+      ? (basicInfo.employeeId || 'N/A')
       : (basicInfo.admissionNo || 'N/A');
     const grade = basicInfo.grade || 'N/A';
     const section = basicInfo.section || 'N/A';
@@ -1040,7 +1041,7 @@ const IdCard = () => {
           borderRight: `2px solid ${isTeacher ? '#6ee7b7' : '#a5b4fc'}`,
           borderBottomRightRadius: '8px'
         }}></div>
-        
+
         <div style={{
           position: 'absolute',
           left: '24px',
@@ -1055,7 +1056,7 @@ const IdCard = () => {
           bottom: '6px',
           borderTop: `1px solid ${isTeacher ? '#a7f3d0' : '#c7d2fe'}`
         }}></div>
-        
+
         <div style={{
           backgroundColor: isTeacher ? '#d1fae5' : '#e0e7ff',
           padding: '6px 16px',
@@ -1135,12 +1136,12 @@ const IdCard = () => {
               paddingBottom: '2px',
               marginBottom: '2px'
             }}>{name}</h3>
-            
+
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2px 8px', fontSize: '12px' }}>
               {isTeacher ? (
                 <>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
-                    <span style={{ color: '#047857', fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Employee ID</span>
+                    <span style={{ color: '#047857', fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>ID</span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
                     <span style={{ color: '#374151', fontSize: '9px', fontWeight: 500 }}>{id}</span>
@@ -1218,10 +1219,10 @@ const IdCard = () => {
   const renderDesign2 = (person, image, type) => {
     const basicInfo = person.basicInfo || {};
     const isTeacher = type === 'teacher';
-    
+
     const name = basicInfo.name || (isTeacher ? 'Teacher Name' : 'Student Name');
-    const id = isTeacher 
-      ? (basicInfo.employeeId || 'N/A') 
+    const id = isTeacher
+      ? (basicInfo.employeeId || 'N/A')
       : (basicInfo.admissionNo || 'N/A');
     const grade = basicInfo.grade || 'N/A';
     const section = basicInfo.section || 'N/A';
@@ -1249,7 +1250,7 @@ const IdCard = () => {
         flexDirection: 'column'
       }}>
         <div style={{ height: '6px', backgroundColor: isTeacher ? '#059669' : '#6366f1' }}></div>
-        
+
         <div style={{
           padding: '12px 12px 8px 12px',
           textAlign: 'center',
@@ -1401,10 +1402,10 @@ const IdCard = () => {
   const renderDesign3 = (person, image, type) => {
     const basicInfo = person.basicInfo || {};
     const isTeacher = type === 'teacher';
-    
+
     const name = basicInfo.name || (isTeacher ? 'Teacher Name' : 'Student Name');
-    const id = isTeacher 
-      ? (basicInfo.employeeId || 'N/A') 
+    const id = isTeacher
+      ? (basicInfo.employeeId || 'N/A')
       : (basicInfo.admissionNo || 'N/A');
     const grade = basicInfo.grade || 'N/A';
     const section = basicInfo.section || 'N/A';
@@ -1456,9 +1457,9 @@ const IdCard = () => {
               opacity: 0.8,
               marginTop: '4px'
             }}>
-              {schoolInfo.schoolAddress || 'Address'} 
+              {schoolInfo.schoolAddress || 'Address'}
               {' || '}
-              {schoolInfo.schoolPhone || 'Phone'} 
+              {schoolInfo.schoolPhone || 'Phone'}
               {' || '}
               {schoolInfo.schoolEmail || 'Email'}
             </span>
@@ -1588,28 +1589,86 @@ const IdCard = () => {
   const handleSaveEdit = async () => {
     try {
       if (cardType === 'student' && selectedStudentForEdit) {
-        const updatedStudents = students.map(s => {
-          if (s.studentId === selectedStudentForEdit.studentId) {
-            return {
-              ...s,
-              basicInfo: { ...s.basicInfo, ...editFormData }
-            };
+        // Prepare the update payload matching your backend field structure
+        const updates = {
+          basicInfo: {
+            name: editFormData.name,
+            admissionNo: editFormData.admissionNo,
+            grade: editFormData.grade,
+            section: editFormData.section,
+            fatherName: editFormData.fatherName,
+            motherName: editFormData.motherName,
+            dob: editFormData.dob,
+            fatherPhone: editFormData.fatherPhone,
+            motherPhone: editFormData.motherPhone,
+            phone: editFormData.phone,
+            email: editFormData.email,
+            address: editFormData.address,
+            bloodGroup: editFormData.bloodGroup,
           }
-          return s;
-        });
-        setStudents(updatedStudents);
+        };
+
+        // ✅ Call the API
+        const result = await StudentApi.updateStudent(
+          selectedStudentForEdit.studentId,
+          updates
+        );
+
+        if (!result.success) {
+          toast.error(result.error || 'Failed to update student');
+          return;
+        }
+
+        // Update local state only after successful API call
+        setStudents(prev => prev.map(s =>
+          s.studentId === selectedStudentForEdit.studentId
+            ? { ...s, basicInfo: { ...s.basicInfo, ...editFormData } }
+            : s
+        ));
+
       } else if (cardType === 'teacher' && selectedTeacherForEdit) {
-        const updatedTeachers = teachers.map(t => {
-          if (t.teacherId === selectedTeacherForEdit.teacherId) {
-            return {
-              ...t,
-              basicInfo: { ...t.basicInfo, ...editFormData }
-            };
-          }
-          return t;
+        const updates = {
+          name: editFormData.name,
+          subject: editFormData.subject,
+          phone: editFormData.phone,
+          email: editFormData.email,
+          designation: editFormData.designation,
+          department: editFormData.department,
+          qualification: editFormData.qualification,
+          joiningDate: editFormData.joiningDate,
+          dob: editFormData.dob,
+          bloodGroup: editFormData.bloodGroup,
+          address: editFormData.address,
+          employeeId: editFormData.employeeId,
+        };
+
+        // Remove undefined/empty strings so backend's undefined-strip works
+        Object.keys(updates).forEach(k => {
+          if (updates[k] === undefined || updates[k] === null) delete updates[k];
         });
-        setTeachers(updatedTeachers);
+
+        const result = await TeacherApi.updateTeacher(
+          selectedTeacherForEdit.teacherId,
+          updates
+        );
+
+        if (!result.success) {
+          toast.error(result.message || result.error || 'Failed to update teacher');
+          return;
+        }
+
+        // ✅ Re-sync local state from what we actually sent
+        setTeachers(prev => prev.map(t =>
+          t.teacherId === selectedTeacherForEdit.teacherId
+            ? {
+              ...t,
+              ...updates,                      // merge flat fields
+              basicInfo: { ...t.basicInfo, ...editFormData }
+            }
+            : t
+        ));
       }
+
       toast.success(`${cardType === 'student' ? 'Student' : 'Teacher'} updated successfully!`);
       setShowEditModal(false);
       setSelectedStudentForEdit(null);
@@ -1639,22 +1698,20 @@ const IdCard = () => {
           <div className="flex gap-2">
             <button
               onClick={() => setCardType('student')}
-              className={`px-5 py-2.5 rounded-lg transition-all flex items-center gap-2 text-sm font-medium ${
-                cardType === 'student'
+              className={`px-5 py-2.5 rounded-lg transition-all flex items-center gap-2 text-sm font-medium ${cardType === 'student'
                   ? 'bg-indigo-600 text-white shadow-lg'
                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
+                }`}
             >
               <GraduationCap size={18} />
               <span>Student ID Cards</span>
             </button>
             <button
               onClick={() => setCardType('teacher')}
-              className={`px-5 py-2.5 rounded-lg transition-all flex items-center gap-2 text-sm font-medium ${
-                cardType === 'teacher'
+              className={`px-5 py-2.5 rounded-lg transition-all flex items-center gap-2 text-sm font-medium ${cardType === 'teacher'
                   ? 'bg-emerald-600 text-white shadow-lg'
                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
+                }`}
             >
               <Briefcase size={18} />
               <span>Teacher ID Cards</span>
@@ -1688,11 +1745,10 @@ const IdCard = () => {
               <button
                 key={key}
                 onClick={() => setSelectedDesign(key)}
-                className={`px-4 py-2 rounded-lg transition-all flex items-center gap-2 text-sm ${
-                  selectedDesign === key
+                className={`px-4 py-2 rounded-lg transition-all flex items-center gap-2 text-sm ${selectedDesign === key
                     ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shadow-lg'
                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
+                  }`}
               >
                 {design.icon}
                 <span>{design.name}</span>
@@ -1788,11 +1844,10 @@ const IdCard = () => {
           <div className="flex gap-2">
             <button
               onClick={handleSearch}
-              className={`flex-1 px-6 py-3 text-white rounded-xl transition flex items-center justify-center gap-2 ${
-                cardType === 'student'
+              className={`flex-1 px-6 py-3 text-white rounded-xl transition flex items-center justify-center gap-2 ${cardType === 'student'
                   ? 'bg-indigo-600 hover:bg-indigo-700'
                   : 'bg-emerald-600 hover:bg-emerald-700'
-              }`}
+                }`}
             >
               <Search size={18} />
               <span>Search</span>
@@ -1834,11 +1889,10 @@ const IdCard = () => {
             {currentFiltered.length > 0 && (
               <button
                 onClick={generateBulkCards}
-                className={`px-4 py-2 text-white rounded-lg transition flex items-center gap-2 text-sm ${
-                  cardType === 'student'
+                className={`px-4 py-2 text-white rounded-lg transition flex items-center gap-2 text-sm ${cardType === 'student'
                     ? 'bg-purple-600 hover:bg-purple-700'
                     : 'bg-teal-600 hover:bg-teal-700'
-                }`}
+                  }`}
               >
                 <FileText size={16} />
                 <span>Generate All ID Cards ({currentFiltered.length})</span>
@@ -1890,11 +1944,10 @@ const IdCard = () => {
                         <td className="px-4 py-3 text-sm text-gray-500">{index + 1}</td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-3">
-                            <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
-                              cardType === 'student'
+                            <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${cardType === 'student'
                                 ? 'bg-gradient-to-br from-indigo-600 to-indigo-800'
                                 : 'bg-gradient-to-br from-emerald-600 to-emerald-800'
-                            }`}>
+                              }`}>
                               <span className="text-white font-bold text-sm">
                                 {person.basicInfo?.name?.charAt(0) || '?'}
                               </span>
@@ -1908,31 +1961,31 @@ const IdCard = () => {
                           </div>
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-600 font-mono">
-                          {cardType === 'student' 
+                          {cardType === 'student'
                             ? (person.basicInfo?.admissionNo || 'N/A')
                             : (person.basicInfo?.employeeId || 'N/A')
                           }
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-600">
-                          {cardType === 'student' 
+                          {cardType === 'student'
                             ? (person.basicInfo?.grade || 'N/A')
                             : (person.basicInfo?.subjects?.join(', ') || person.basicInfo?.subject || 'N/A')
                           }
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-600">
-                          {cardType === 'student' 
+                          {cardType === 'student'
                             ? (person.basicInfo?.section || 'N/A')
                             : (person.basicInfo?.department || 'N/A')
                           }
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-600">
-                          {cardType === 'student' 
+                          {cardType === 'student'
                             ? (person.basicInfo?.fatherName || 'N/A')
                             : (person.basicInfo?.qualification || 'N/A')
                           }
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-600">
-                          {cardType === 'student' 
+                          {cardType === 'student'
                             ? (person.basicInfo?.fatherPhone || 'N/A')
                             : (person.basicInfo?.phone || 'N/A')
                           }
@@ -1992,9 +2045,8 @@ const IdCard = () => {
       {/* ============ INITIAL STATE ============ */}
       {!hasSearched && !isLoading && (
         <div className="bg-white rounded-xl border border-gray-200 p-16 text-center">
-          <div className={`w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-6 ${
-            cardType === 'student' ? 'bg-indigo-50' : 'bg-emerald-50'
-          }`}>
+          <div className={`w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-6 ${cardType === 'student' ? 'bg-indigo-50' : 'bg-emerald-50'
+            }`}>
             {cardType === 'student' ? (
               <GraduationCap size={48} className="text-indigo-400" />
             ) : (
@@ -2071,11 +2123,10 @@ const IdCard = () => {
                     )}
                     <button
                       onClick={() => fileInputRef.current.click()}
-                      className={`px-3 py-1 text-sm text-white rounded-lg transition flex items-center gap-1 disabled:opacity-50 ${
-                        cardType === 'student'
+                      className={`px-3 py-1 text-sm text-white rounded-lg transition flex items-center gap-1 disabled:opacity-50 ${cardType === 'student'
                           ? 'bg-indigo-600 hover:bg-indigo-700'
                           : 'bg-emerald-600 hover:bg-emerald-700'
-                      }`}
+                        }`}
                       disabled={isUploading}
                     >
                       {isUploading ? (
@@ -2105,7 +2156,7 @@ const IdCard = () => {
 
               {/* Card Preview */}
               <div className="flex justify-center items-center p-4 bg-gray-50 rounded-xl border border-gray-200 w-full overflow-auto">
-                <div 
+                <div
                   ref={cardRef}
                   className="transform transition-transform duration-200"
                   style={{ transform: `scale(${previewScale})` }}
@@ -2138,7 +2189,7 @@ const IdCard = () => {
                   Reset
                 </button>
               </div>
-              
+
               <div className="flex gap-3 mt-6 w-full max-w-md">
                 <button
                   onClick={printSingleCard}
@@ -2198,13 +2249,13 @@ const IdCard = () => {
               <div className="flex justify-center items-center p-4 bg-gray-50 rounded-xl border border-gray-200 w-full overflow-auto">
                 <div ref={cardRef}>
                   {renderIdCard(
-                    generatedCards[currentCardIndex], 
+                    generatedCards[currentCardIndex],
                     generatedCards[currentCardIndex]?.basicInfo?.photoUrl || null,
                     cardType
                   )}
                 </div>
               </div>
-              
+
               <div className="w-full max-w-md mt-4">
                 <div className="flex justify-between text-sm text-gray-600 mb-1">
                   <span>Progress</span>
@@ -2212,9 +2263,8 @@ const IdCard = () => {
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-2">
                   <div
-                    className={`h-2 rounded-full transition-all duration-300 ${
-                      cardType === 'student' ? 'bg-indigo-600' : 'bg-emerald-600'
-                    }`}
+                    className={`h-2 rounded-full transition-all duration-300 ${cardType === 'student' ? 'bg-indigo-600' : 'bg-emerald-600'
+                      }`}
                     style={{ width: `${((currentCardIndex + 1) / generatedCards.length) * 100}%` }}
                   />
                 </div>
@@ -2264,7 +2314,7 @@ const IdCard = () => {
                   <input
                     type="text"
                     value={editFormData.name || ''}
-                    onChange={(e) => setEditFormData({...editFormData, name: e.target.value})}
+                    onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                   />
                 </div>
@@ -2276,7 +2326,7 @@ const IdCard = () => {
                       <input
                         type="text"
                         value={editFormData.admissionNo || ''}
-                        onChange={(e) => setEditFormData({...editFormData, admissionNo: e.target.value})}
+                        onChange={(e) => setEditFormData({ ...editFormData, admissionNo: e.target.value })}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                       />
                     </div>
@@ -2284,7 +2334,7 @@ const IdCard = () => {
                       <label className="block text-sm font-medium text-gray-700 mb-1">Grade</label>
                       <select
                         value={editFormData.grade || ''}
-                        onChange={(e) => setEditFormData({...editFormData, grade: e.target.value})}
+                        onChange={(e) => setEditFormData({ ...editFormData, grade: e.target.value })}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                       >
                         <option value="">Select Grade</option>
@@ -2297,7 +2347,7 @@ const IdCard = () => {
                       <label className="block text-sm font-medium text-gray-700 mb-1">Section</label>
                       <select
                         value={editFormData.section || ''}
-                        onChange={(e) => setEditFormData({...editFormData, section: e.target.value})}
+                        onChange={(e) => setEditFormData({ ...editFormData, section: e.target.value })}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                       >
                         <option value="">Select Section</option>
@@ -2311,7 +2361,7 @@ const IdCard = () => {
                       <input
                         type="text"
                         value={editFormData.fatherName || ''}
-                        onChange={(e) => setEditFormData({...editFormData, fatherName: e.target.value})}
+                        onChange={(e) => setEditFormData({ ...editFormData, fatherName: e.target.value })}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                       />
                     </div>
@@ -2320,7 +2370,7 @@ const IdCard = () => {
                       <input
                         type="text"
                         value={editFormData.motherName || ''}
-                        onChange={(e) => setEditFormData({...editFormData, motherName: e.target.value})}
+                        onChange={(e) => setEditFormData({ ...editFormData, motherName: e.target.value })}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                       />
                     </div>
@@ -2329,7 +2379,7 @@ const IdCard = () => {
                       <input
                         type="tel"
                         value={editFormData.fatherPhone || ''}
-                        onChange={(e) => setEditFormData({...editFormData, fatherPhone: e.target.value})}
+                        onChange={(e) => setEditFormData({ ...editFormData, fatherPhone: e.target.value })}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                       />
                     </div>
@@ -2338,7 +2388,7 @@ const IdCard = () => {
                       <input
                         type="tel"
                         value={editFormData.motherPhone || ''}
-                        onChange={(e) => setEditFormData({...editFormData, motherPhone: e.target.value})}
+                        onChange={(e) => setEditFormData({ ...editFormData, motherPhone: e.target.value })}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                       />
                     </div>
@@ -2346,11 +2396,11 @@ const IdCard = () => {
                 ) : (
                   <>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Employee ID</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">ID</label>
                       <input
                         type="text"
                         value={editFormData.employeeId || ''}
-                        onChange={(e) => setEditFormData({...editFormData, employeeId: e.target.value})}
+                        onChange={(e) => setEditFormData({ ...editFormData, employeeId: e.target.value })}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                       />
                     </div>
@@ -2359,7 +2409,7 @@ const IdCard = () => {
                       <input
                         type="text"
                         value={editFormData.designation || ''}
-                        onChange={(e) => setEditFormData({...editFormData, designation: e.target.value})}
+                        onChange={(e) => setEditFormData({ ...editFormData, designation: e.target.value })}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                       />
                     </div>
@@ -2368,7 +2418,7 @@ const IdCard = () => {
                       <input
                         type="text"
                         value={editFormData.department || ''}
-                        onChange={(e) => setEditFormData({...editFormData, department: e.target.value})}
+                        onChange={(e) => setEditFormData({ ...editFormData, department: e.target.value })}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                       />
                     </div>
@@ -2377,7 +2427,7 @@ const IdCard = () => {
                       <input
                         type="text"
                         value={editFormData.subject || ''}
-                        onChange={(e) => setEditFormData({...editFormData, subject: e.target.value})}
+                        onChange={(e) => setEditFormData({ ...editFormData, subject: e.target.value })}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                       />
                     </div>
@@ -2386,7 +2436,7 @@ const IdCard = () => {
                       <input
                         type="text"
                         value={editFormData.qualification || ''}
-                        onChange={(e) => setEditFormData({...editFormData, qualification: e.target.value})}
+                        onChange={(e) => setEditFormData({ ...editFormData, qualification: e.target.value })}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                       />
                     </div>
@@ -2395,7 +2445,7 @@ const IdCard = () => {
                       <input
                         type="date"
                         value={editFormData.joiningDate || ''}
-                        onChange={(e) => setEditFormData({...editFormData, joiningDate: e.target.value})}
+                        onChange={(e) => setEditFormData({ ...editFormData, joiningDate: e.target.value })}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                       />
                     </div>
@@ -2404,7 +2454,7 @@ const IdCard = () => {
                       <input
                         type="tel"
                         value={editFormData.phone || ''}
-                        onChange={(e) => setEditFormData({...editFormData, phone: e.target.value})}
+                        onChange={(e) => setEditFormData({ ...editFormData, phone: e.target.value })}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                       />
                     </div>
@@ -2413,7 +2463,7 @@ const IdCard = () => {
                       <input
                         type="email"
                         value={editFormData.email || ''}
-                        onChange={(e) => setEditFormData({...editFormData, email: e.target.value})}
+                        onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                       />
                     </div>
@@ -2425,7 +2475,7 @@ const IdCard = () => {
                   <input
                     type="date"
                     value={editFormData.dob || ''}
-                    onChange={(e) => setEditFormData({...editFormData, dob: e.target.value})}
+                    onChange={(e) => setEditFormData({ ...editFormData, dob: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                   />
                 </div>
@@ -2433,7 +2483,7 @@ const IdCard = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">Blood Group</label>
                   <select
                     value={editFormData.bloodGroup || ''}
-                    onChange={(e) => setEditFormData({...editFormData, bloodGroup: e.target.value})}
+                    onChange={(e) => setEditFormData({ ...editFormData, bloodGroup: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                   >
                     <option value="">Select Blood Group</option>
@@ -2446,7 +2496,7 @@ const IdCard = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
                   <textarea
                     value={editFormData.address || ''}
-                    onChange={(e) => setEditFormData({...editFormData, address: e.target.value})}
+                    onChange={(e) => setEditFormData({ ...editFormData, address: e.target.value })}
                     rows="2"
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                   />
@@ -2456,11 +2506,10 @@ const IdCard = () => {
               <div className="flex gap-3 mt-6">
                 <button
                   onClick={handleSaveEdit}
-                  className={`flex-1 px-4 py-2 text-white rounded-lg transition flex items-center justify-center gap-2 ${
-                    cardType === 'student'
+                  className={`flex-1 px-4 py-2 text-white rounded-lg transition flex items-center justify-center gap-2 ${cardType === 'student'
                       ? 'bg-indigo-600 hover:bg-indigo-700'
                       : 'bg-emerald-600 hover:bg-emerald-700'
-                  }`}
+                    }`}
                 >
                   <CheckCircle size={18} />
                   <span>Save Changes</span>
