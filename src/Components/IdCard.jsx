@@ -154,7 +154,7 @@ const IdCard = () => {
           // Flatten the structure - teachers have flat fields, not nested basicInfo
           basicInfo: {
             name: teacher.name || '',
-            employeeId: teacher.teacherId || '',
+            // employeeId: teacher.teacherId || '',
             designation: teacher.designation || 'Teacher',
             department: teacher.department || teacher.subject || '',
             subject: teacher.subject || '',

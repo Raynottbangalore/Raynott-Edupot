@@ -205,7 +205,6 @@ static async createSchoolUser(userData) {
   /**
    * Get all users of a specific school
    */
-  // In SchoolApi.js - Update getSchoolUsers method
 static async getSchoolUsers(schoolId) {
   try {
     const headers = await this.getAuthHeader();

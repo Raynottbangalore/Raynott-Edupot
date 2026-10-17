@@ -630,6 +630,74 @@ static async getAllStudentsWithClassMarks(forceRefresh = false) {
   }
 
   // ────────────────────────────────────────────────
+// Fees Installments
+// ────────────────────────────────────────────────
+
+/**
+ * Add a new fee installment for a student.
+ * @param {string} studentId
+ * @param {Object} installmentData
+ * @returns {Promise<Object>}
+ */
+static async addInstallment(studentId, installmentData) {
+  try {
+    const data = await this.makeRequest(
+      `${BASE_URL}/students/${studentId}/installments`,
+      {
+        method: 'POST',
+        body: JSON.stringify(installmentData),
+      }
+    );
+    return data;
+  } catch (error) {
+    console.error('❌ Add installment error:', error);
+    return { success: false, error: error.message || 'Could not add installment' };
+  }
+}
+
+/**
+ * Update an existing fee installment for a student.
+ * @param {string} studentId
+ * @param {string|number} installmentId
+ * @param {Object} updates
+ * @returns {Promise<Object>}
+ */
+static async updateInstallment(studentId, installmentId, updates) {
+  try {
+    const data = await this.makeRequest(
+      `${BASE_URL}/students/${studentId}/installments/${installmentId}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify(updates),
+      }
+    );
+    return data;
+  } catch (error) {
+    console.error('❌ Update installment error:', error);
+    return { success: false, error: error.message || 'Could not update installment' };
+  }
+}
+
+/**
+ * Delete a fee installment for a student.
+ * @param {string} studentId
+ * @param {string|number} installmentId
+ * @returns {Promise<Object>}
+ */
+static async deleteInstallment(studentId, installmentId) {
+  try {
+    const data = await this.makeRequest(
+      `${BASE_URL}/students/${studentId}/installments/${installmentId}`,
+      { method: 'DELETE' }
+    );
+    return data;
+  } catch (error) {
+    console.error('❌ Delete installment error:', error);
+    return { success: false, error: error.message || 'Could not delete installment' };
+  }
+}
+
+  // ────────────────────────────────────────────────
   // Class Exams Operations
   // ────────────────────────────────────────────────
 
@@ -1952,6 +2020,48 @@ static async getStudentPhotoBase64(studentId) {
   } catch (error) {
     console.error('❌ Get student photo base64 error:', error);
     return { success: false, error: error.message || 'Could not get photo', photoData: null };
+  }
+}
+// ────────────────────────────────────────────────
+// Class Exam: single-exam fetch + edit subjects/marks
+// ────────────────────────────────────────────────
+
+static async getClassExam(grade, section, examId) {
+  try {
+    const data = await this.makeRequest(
+      `${BASE_URL}/class-exams/${grade}/${section}/exams/${examId}`,
+      { method: 'GET' }
+    );
+    return { success: true, exam: data.exam };
+  } catch (error) {
+    console.error('❌ Get class exam error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Update a class exam's subjects (name + total) and optionally per-student
+ * obtained marks.
+ *
+ * @param {string} grade
+ * @param {string} section
+ * @param {string} examId
+ * @param {Array<{name: string, total: number}>} subjects
+ * @param {Object<string, Array<{name: string, marks: number}>>} studentMarks
+ */
+static async updateClassExamDetails(grade, section, examId, subjects, studentMarks = {}) {
+  try {
+    const data = await this.makeRequest(
+      `${BASE_URL}/class-exams/${grade}/${section}/exams/${examId}/details`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({ subjects, studentMarks }),
+      }
+    );
+    return data;
+  } catch (error) {
+    console.error('❌ Update class exam details error:', error);
+    return { success: false, error: error.message };
   }
 }
 }
