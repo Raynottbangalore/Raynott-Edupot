@@ -16,10 +16,13 @@ import {
   CheckSquare,
   Square,
   ChevronDown,
+  MessageCircle,
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import StudentApi from '../service/StudentApi';
 import html2pdf from 'html2pdf.js';
+
+const FALLBACK_SCHOOL_NAME = 'Your School Name';
 
 const Billing = () => {
   // State
@@ -31,6 +34,9 @@ const Billing = () => {
   const [selectedSection, setSelectedSection] = useState('');
   const [hasSearched, setHasSearched] = useState(false);
 
+  // School info state
+  const [schoolInfo, setSchoolInfo] = useState(null);
+
   // Modal states
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
@@ -41,7 +47,7 @@ const Billing = () => {
   const [showStudentInvoices, setShowStudentInvoices] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
 
-  // Selected installment IDs (user decides — nothing auto-selected)
+  // Selected installment IDs
   const [selectedInstallmentIds, setSelectedInstallmentIds] = useState([]);
 
   // Dropdown open state
@@ -63,6 +69,7 @@ const Billing = () => {
 
   useEffect(() => {
     loadStudents();
+    loadSchoolInfo();
   }, []);
 
   useEffect(() => {
@@ -115,6 +122,25 @@ const Billing = () => {
       setIsLoading(false);
     }
   };
+
+  const loadSchoolInfo = async () => {
+    try {
+      const result = await StudentApi.getSchoolInfo();
+      if (result.success && result.data) {
+        setSchoolInfo(result.data);
+      } else {
+        console.warn('School info not available:', result.error);
+      }
+    } catch (error) {
+      console.error('Error loading school info:', error);
+    }
+  };
+
+  // Helper — resolve school name with fallback
+  const getSchoolName = () =>
+    schoolInfo?.name?.trim() ||
+    schoolInfo?.schoolName?.trim() ||
+    FALLBACK_SCHOOL_NAME;
 
   const applyFilters = () => {
     let filtered = [...students];
@@ -176,7 +202,6 @@ const Billing = () => {
   const getInstallmentId = (inst, idx) =>
     inst.id != null ? String(inst.id) : `idx_${idx}_${inst.number ?? idx}`;
 
-  // Nothing is disabled — user decides every row
   const toggleInstallment = (instId) => {
     setSelectedInstallmentIds((prev) =>
       prev.includes(instId) ? prev.filter((x) => x !== instId) : [...prev, instId]
@@ -244,6 +269,7 @@ const Billing = () => {
         studentSection: student?.basicInfo?.section || '',
         studentFather: student?.basicInfo?.fatherName || '',
         studentPhone: student?.basicInfo?.fatherPhone || '',
+        schoolName: getSchoolName(),
         items: invoiceData.items.map((item) => ({
           description: item.description,
           amount: parseFloat(item.amount) || 0,
@@ -258,7 +284,11 @@ const Billing = () => {
       const result = await StudentApi.createInvoice(invoicePayload);
 
       if (result.success) {
-        setGeneratedInvoice(result.invoice);
+        const invoiceWithSchool = {
+          ...result.invoice,
+          schoolName: result.invoice?.schoolName || getSchoolName(),
+        };
+        setGeneratedInvoice(invoiceWithSchool);
         toast.success(`Invoice ${result.invoice.invoiceNumber} generated!`);
         setShowInvoiceModal(false);
         setShowPreviewModal(true);
@@ -349,16 +379,6 @@ const Billing = () => {
   // ────────────────────────────────────────────────
   // Helpers
   // ────────────────────────────────────────────────
-  const getStatusStyle = (status) => {
-    if (status === 'paid' || status === 'completed')
-      return { backgroundColor: '#dcfce7', color: '#166534' };
-    if (status === 'partial')
-      return { backgroundColor: '#fef3c7', color: '#92400e' };
-    if (status === 'overdue')
-      return { backgroundColor: '#fee2e2', color: '#991b1b' };
-    return { backgroundColor: '#f3f4f6', color: '#374151' };
-  };
-
   const formatDate = (d) => {
     if (!d) return '—';
     try {
@@ -382,7 +402,76 @@ const Billing = () => {
   };
 
   // ────────────────────────────────────────────────
-  // Invoice preview
+  // WhatsApp messaging
+  // ────────────────────────────────────────────────
+  const normalizePhone = (phone) => {
+    if (!phone) return '';
+    const digits = String(phone).replace(/\D/g, '');
+    if (digits.length === 10) return `91${digits}`;
+    if (digits.length === 11 && digits.startsWith('0')) return `91${digits.slice(1)}`;
+    return digits;
+  };
+
+  const buildWhatsAppMessage = (invoice) => {
+  const installmentNumbers = getInvoiceInstallmentNumbers(invoice);
+  const schoolName = invoice?.schoolName?.trim() || getSchoolName();
+
+  // Build "descriptions and its payment" string, e.g. "Tuition Fee ₹15,000, Transport Fee ₹2,000"
+  const itemsSummary = invoice.items
+    .map(
+      (item) =>
+        `${item.description} ₹${Number(item.amount).toLocaleString()}`
+    )
+    .join(', ');
+
+  const classInfo = `${invoice.studentGrade || 'N/A'}${
+    invoice.studentSection ? `-${invoice.studentSection}` : ''
+  }`;
+
+  // Build parent name line
+  const lines = [
+    `Dear ${invoice.studentFather || 'Parent'},`,
+    '',
+    `We have received the payment of  *₹${Number(invoice.total).toLocaleString()}* for *${invoice.studentName || 'your child'}* — Class ${classInfo}${
+      installmentNumbers ? ` for Installment ${installmentNumbers}` : ''
+    } on ${formatDate(invoice.date)}.`,
+    '',
+    `*Payment Details:* ${itemsSummary}`,
+    '',
+    `Invoice ID: *${invoice.invoiceNumber}*`,
+  ];
+
+  // Include note only if present
+  if (invoice.notes && invoice.notes.trim()) {
+    lines.push('', `📝 Note: ${invoice.notes.trim()}`);
+  }
+
+  lines.push(
+    '',
+    'Thank you!',
+    `— *${schoolName}*`
+  );
+
+  return lines.join('\n');
+};
+
+  const sendWhatsApp = (invoice) => {
+    if (!invoice) {
+      toast.error('Invoice not available');
+      return;
+    }
+    const phone = normalizePhone(invoice.studentPhone);
+    if (!phone) {
+      toast.error('No phone number available for this student');
+      return;
+    }
+    const text = encodeURIComponent(buildWhatsAppMessage(invoice));
+    const url = `https://wa.me/${phone}?text=${text}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
+  // ────────────────────────────────────────────────
+  // Invoice preview (with school details header)
   // ────────────────────────────────────────────────
   const renderInvoicePreview = (invoice) => {
     const styles = {
@@ -397,11 +486,39 @@ const Billing = () => {
       header: {
         textAlign: 'center',
         borderBottom: '2px solid #4f46e5',
-        paddingBottom: '24px',
+        paddingBottom: '20px',
         marginBottom: '24px',
       },
-      headerTitle: { fontSize: '28px', fontWeight: 'bold', color: '#4f46e5', margin: 0 },
-      headerSub: { color: '#6b7280', fontSize: '14px', marginTop: '4px' },
+      logo: {
+        maxHeight: '70px',
+        maxWidth: '120px',
+        objectFit: 'contain',
+        marginBottom: '8px',
+      },
+      schoolName: {
+        fontSize: '24px',
+        fontWeight: 'bold',
+        color: '#4f46e5',
+        margin: 0,
+        lineHeight: 1.2,
+      },
+      schoolMeta: {
+        fontSize: '12px',
+        color: '#6b7280',
+        marginTop: '6px',
+        lineHeight: 1.5,
+      },
+      schoolMetaLine: {
+        margin: '2px 0',
+      },
+      invoiceTitle: {
+        fontSize: '16px',
+        fontWeight: 'bold',
+        color: '#374151',
+        marginTop: '14px',
+        letterSpacing: '2px',
+        textTransform: 'uppercase',
+      },
       detailsRow: {
         display: 'flex',
         justifyContent: 'space-between',
@@ -486,13 +603,57 @@ const Billing = () => {
 
     const installmentNumbers = getInvoiceInstallmentNumbers(invoice);
 
+    // School details — prefer live schoolInfo, fall back to invoice snapshot
+    const school = {
+      name: schoolInfo?.name || schoolInfo?.schoolName || invoice.schoolName || FALLBACK_SCHOOL_NAME,
+      address: schoolInfo?.address || schoolInfo?.schoolAddress || '',
+      affiliation: schoolInfo?.affiliation || schoolInfo?.board || schoolInfo?.affiliatedTo || '',
+      email: schoolInfo?.email || schoolInfo?.schoolEmail || '',
+      phone: schoolInfo?.phone || schoolInfo?.schoolPhone || schoolInfo?.contact || '',
+      logoUrl: schoolInfo?.logoUrl || schoolInfo?.logo || schoolInfo?.schoolLogo || '',
+    };
+
+    const metaParts = [];
+    if (school.address) metaParts.push(school.address);
+    if (school.affiliation) metaParts.push(`Affiliation: ${school.affiliation}`);
+
+    const contactParts = [];
+    if (school.phone) contactParts.push(` ${school.phone}`);
+    if (school.email) contactParts.push(` ${school.email}`);
+
     return (
       <div style={styles.container}>
+        {/* School Header */}
         <div style={styles.header}>
-          <h1 style={styles.headerTitle}>INVOICE</h1>
-          <p style={styles.headerSub}>Payment Receipt</p>
+          {school.logoUrl && (
+            <img src={school.logoUrl} alt="School Logo" style={styles.logo} />
+          )}
+          <h1 style={styles.schoolName}>{school.name}</h1>
+          {metaParts.length > 0 && (
+            <div style={styles.schoolMeta}>
+              {school.address && (
+                <p style={{ ...styles.schoolMetaLine, margin: '4px 0 2px 0' }}>
+                  {school.address}
+                </p>
+              )}
+              {school.affiliation && (
+                <p style={{ ...styles.schoolMetaLine, margin: '2px 0' }}>
+                  Affiliation: {school.affiliation}
+                </p>
+              )}
+            </div>
+          )}
+          {contactParts.length > 0 && (
+            <div style={styles.schoolMeta}>
+              <p style={{ ...styles.schoolMetaLine, margin: '2px 0' }}>
+                {contactParts.join('   |   ')}
+              </p>
+            </div>
+          )}
+          <p style={styles.invoiceTitle}>INVOICE</p>
         </div>
 
+        {/* Invoice meta */}
         <div style={styles.detailsRow}>
           <div>
             <p style={styles.detailsText}>
@@ -506,6 +667,7 @@ const Billing = () => {
           </div>
         </div>
 
+        {/* Student details */}
         <div style={styles.studentBox}>
           <h3 style={styles.studentTitle}>STUDENT DETAILS</h3>
           <div style={styles.studentGrid}>
@@ -530,6 +692,7 @@ const Billing = () => {
           </div>
         </div>
 
+        {/* Items */}
         <h3 style={{ fontWeight: '600', color: '#374151', marginBottom: '12px' }}>
           INVOICE ITEMS
         </h3>
@@ -626,7 +789,7 @@ const Billing = () => {
   };
 
   // ────────────────────────────────────────────────
-  // Print
+  // Print (with school details header)
   // ────────────────────────────────────────────────
   const printInvoice = (invoice) => {
     const printWindow = window.open('', '_blank', 'width=800,height=600');
@@ -634,6 +797,15 @@ const Billing = () => {
       toast.error('Please allow popups to print');
       return;
     }
+
+    const school = {
+      name: schoolInfo?.name || schoolInfo?.schoolName || invoice.schoolName || FALLBACK_SCHOOL_NAME,
+      address: schoolInfo?.address || schoolInfo?.schoolAddress || '',
+      affiliation: schoolInfo?.affiliation || schoolInfo?.board || schoolInfo?.affiliatedTo || '',
+      email: schoolInfo?.email || schoolInfo?.schoolEmail || '',
+      phone: schoolInfo?.phone || schoolInfo?.schoolPhone || schoolInfo?.contact || '',
+      logoUrl: schoolInfo?.logoUrl || schoolInfo?.logo || schoolInfo?.schoolLogo || '',
+    };
 
     const itemsHTML = invoice.items
       .map(
@@ -656,6 +828,13 @@ const Billing = () => {
       `
       : '';
 
+    const schoolMetaParts = [];
+    if (school.address) schoolMetaParts.push(school.address);
+    if (school.affiliation) schoolMetaParts.push(`Affiliation: ${school.affiliation}`);
+    const contactParts = [];
+    if (school.phone) contactParts.push(` ${school.phone}`);
+    if (school.email) contactParts.push(` ${school.email}`);
+
     const html = `
       <!DOCTYPE html>
       <html>
@@ -668,9 +847,12 @@ const Billing = () => {
             max-width: 800px; margin: 0 auto; background: white;
             border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); padding: 40px;
           }
-          .header { text-align: center; border-bottom: 2px solid #4f46e5; padding-bottom: 24px; margin-bottom: 24px; }
-          .header h1 { color: #4f46e5; font-size: 28px; font-weight: bold; margin: 0; }
-          .header p { color: #6b7280; font-size: 14px; margin-top: 4px; }
+          .header { text-align: center; border-bottom: 2px solid #4f46e5; padding-bottom: 20px; margin-bottom: 24px; }
+          .header img { max-height: 70px; max-width: 120px; object-fit: contain; margin-bottom: 8px; }
+          .header h1 { color: #4f46e5; font-size: 24px; font-weight: bold; margin: 0; line-height: 1.2; }
+          .school-meta { color: #6b7280; font-size: 12px; margin-top: 6px; line-height: 1.5; }
+          .school-meta p { margin: 2px 0; }
+          .invoice-title { font-size: 16px; font-weight: bold; color: #374151; margin-top: 14px; letter-spacing: 2px; text-transform: uppercase; }
           .invoice-details {
             display: flex; justify-content: space-between; margin-bottom: 24px;
             padding: 16px; background: #f9fafb; border-radius: 8px;
@@ -730,8 +912,22 @@ const Billing = () => {
 
         <div class="invoice-container">
           <div class="header">
-            <h1>INVOICE</h1>
-            <p>Payment Receipt</p>
+            ${school.logoUrl ? `<img src="${school.logoUrl}" alt="School Logo" />` : ''}
+            <h1>${school.name}</h1>
+            ${
+              schoolMetaParts.length > 0
+                ? `<div class="school-meta">
+                    ${school.address ? `<p>${school.address}</p>` : ''}
+                    ${school.affiliation ? `<p>Affiliation: ${school.affiliation}</p>` : ''}
+                  </div>`
+                : ''
+            }
+            ${
+              contactParts.length > 0
+                ? `<div class="school-meta"><p>${contactParts.join('   |   ')}</p></div>`
+                : ''
+            }
+            <p class="invoice-title">INVOICE</p>
           </div>
 
           <div class="invoice-details">
@@ -961,21 +1157,6 @@ const Billing = () => {
                       </div>
                     </div>
 
-                    {/* <div className="mt-4 pt-3 border-t border-gray-100 flex justify-between text-xs">
-                      <div>
-                        <p className="text-gray-500">Paid</p>
-                        <p className="font-semibold text-green-600">
-                          ₹{(student.totalPaid || 0).toLocaleString()}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-gray-500">Pending</p>
-                        <p className="font-semibold text-red-600">
-                          ₹{(student.pendingAmount || 0).toLocaleString()}
-                        </p>
-                      </div>
-                    </div> */}
-
                     <div className="mt-3 pt-3 border-t border-gray-100 flex flex-wrap gap-2">
                       <button
                         onClick={() => handleNewInvoice(student)}
@@ -1070,19 +1251,7 @@ const Billing = () => {
                         >
                           {dropdownLabel}
                         </span>
-                        {/* <div className="flex items-center gap-2">
-                          {selectedInstallmentIds.length > 0 && (
-                            <span className="text-xs text-indigo-600 font-medium">
-                              ₹{selectedInstallmentTotal.toLocaleString()} due
-                            </span>
-                          )}
-                          <ChevronDown
-                            size={18}
-                            className={`text-gray-400 transition-transform ${
-                              showInstallmentDropdown ? 'rotate-180' : ''
-                            }`}
-                          />
-                        </div> */}
+                        <ChevronDown size={16} className="text-gray-400" />
                       </button>
 
                       {showInstallmentDropdown && (
@@ -1145,22 +1314,15 @@ const Billing = () => {
                                     Installment {inst.number ?? idx + 1}
                                   </span>
                                 </div>
-                                {/* <div className="flex items-center gap-3 text-xs">
-                                  <span className="text-gray-500">
-                                    Due: ₹{due > 0 ? due.toLocaleString() : 0}
-                                  </span>
-                                  <span
-                                    style={{
-                                      padding: '2px 8px',
-                                      borderRadius: '9999px',
-                                      fontSize: '10px',
-                                      fontWeight: 600,
-                                      ...getStatusStyle(inst.status),
-                                    }}
-                                  >
-                                    {(inst.status || 'pending').toUpperCase()}
-                                  </span>
-                                </div> */}
+                                <span
+                                  className={`text-xs font-medium ${
+                                    due > 0 ? 'text-red-600' : 'text-green-600'
+                                  }`}
+                                >
+                                  {due > 0
+                                    ? `₹${due.toLocaleString()} due`
+                                    : 'Paid'}
+                                </span>
                               </button>
                             );
                           })}
@@ -1172,6 +1334,11 @@ const Billing = () => {
                   {selectedInstallmentIds.length > 0 && (
                     <p className="text-xs text-gray-500 mt-2">
                       Covered: {selectedInstallmentNumbers}
+                      {selectedInstallmentTotal > 0 && (
+                        <span className="ml-2 text-indigo-600 font-medium">
+                          (₹{selectedInstallmentTotal.toLocaleString()} due)
+                        </span>
+                      )}
                     </p>
                   )}
                 </div>
@@ -1309,17 +1476,17 @@ const Billing = () => {
       )}
 
       {/* Preview Invoice Modal */}
-      {showPreviewModal && (
+      {showPreviewModal && generatedInvoice && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[9999] p-4 overflow-y-auto">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white z-10 border-b px-6 py-4 flex justify-between items-center">
+            <div className="sticky top-0 bg-white z-10 border-b px-6 py-4 flex justify-between items-center flex-wrap gap-2">
               <div>
                 <h2 className="text-2xl font-bold text-gray-900">Invoice Preview</h2>
                 <p className="text-sm text-gray-500 mt-1">
-                  {generatedInvoice ? generatedInvoice.invoiceNumber : 'Sample Invoice'}
+                  {generatedInvoice.invoiceNumber}
                 </p>
               </div>
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center space-x-2 flex-wrap gap-2">
                 <button
                   onClick={() => downloadPDF(generatedInvoice)}
                   disabled={isDownloading}
@@ -1340,6 +1507,14 @@ const Billing = () => {
                   <span>Print</span>
                 </button>
                 <button
+                  onClick={() => sendWhatsApp(generatedInvoice)}
+                  className="px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition flex items-center gap-2"
+                  title="Send via WhatsApp"
+                >
+                  <MessageCircle size={18} />
+                  <span>WhatsApp</span>
+                </button>
+                <button
                   onClick={() => {
                     setShowPreviewModal(false);
                     setGeneratedInvoice(null);
@@ -1352,7 +1527,7 @@ const Billing = () => {
             </div>
 
             <div className="p-8" ref={invoiceRef}>
-              {generatedInvoice && renderInvoicePreview(generatedInvoice)}
+              {renderInvoicePreview(generatedInvoice)}
             </div>
           </div>
         </div>
@@ -1422,10 +1597,14 @@ const Billing = () => {
                           </p>
                         </div>
                       </div>
-                      <div className="mt-3 flex gap-2">
+                      <div className="mt-3 flex gap-2 flex-wrap">
                         <button
                           onClick={() => {
-                            setGeneratedInvoice(invoice);
+                            // enrich with schoolName so WhatsApp message uses correct school
+                            setGeneratedInvoice({
+                              ...invoice,
+                              schoolName: invoice.schoolName || getSchoolName(),
+                            });
                             setShowStudentInvoices(false);
                             setShowPreviewModal(true);
                           }}
@@ -1433,6 +1612,19 @@ const Billing = () => {
                         >
                           <Eye size={14} />
                           Preview
+                        </button>
+                        <button
+                          onClick={() =>
+                            sendWhatsApp({
+                              ...invoice,
+                              schoolName: invoice.schoolName || getSchoolName(),
+                            })
+                          }
+                          className="px-3 py-1.5 text-sm bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition flex items-center gap-1"
+                          title="Send via WhatsApp"
+                        >
+                          <MessageCircle size={14} />
+                          WhatsApp
                         </button>
                       </div>
                     </div>
