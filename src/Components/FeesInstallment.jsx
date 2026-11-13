@@ -1,6 +1,12 @@
+// src/components/dashboard/components/FeesInstallment.jsx
 import React, { useState } from 'react';
-import { Plus, Trash2, Save } from 'lucide-react';
+import { Plus, Trash2, Save, MessageCircle } from 'lucide-react';
+import { toast } from 'react-toastify';
 import StudentApi from '../service/StudentApi'; // Adjust path as needed
+
+// Module-level cache for school info (avoid refetching per installment)
+let __schoolInfoCache = null;
+let __schoolInfoPromise = null;
 
 const FeesInstallment = ({ student, onUpdateStudent }) => {
   const [showCustomStatus, setShowCustomStatus] = useState({});
@@ -14,16 +20,204 @@ const FeesInstallment = ({ student, onUpdateStudent }) => {
   const studentId = student.studentId || student.id;
 
   // ────────────────────────────────────────────────
+  // School info helpers (cached)
+  // ────────────────────────────────────────────────
+  const loadSchoolInfo = async () => {
+    if (__schoolInfoCache) return __schoolInfoCache;
+    if (__schoolInfoPromise) return __schoolInfoPromise;
+
+    __schoolInfoPromise = (async () => {
+      try {
+        const res = await StudentApi.getSchoolInfo();
+        if (res.success && res.data) {
+          __schoolInfoCache = res.data;
+          return res.data;
+        }
+      } catch (err) {
+        console.warn('Could not load school info:', err);
+      } finally {
+        __schoolInfoPromise = null;
+      }
+      return null;
+    })();
+
+    return __schoolInfoPromise;
+  };
+
+  const getSchoolName = async () => {
+    const info = await loadSchoolInfo();
+    return (
+      info?.name?.trim() ||
+      info?.schoolName?.trim() ||
+      'Your School Name'
+    );
+  };
+
+  // ────────────────────────────────────────────────
+  // WhatsApp helpers
+  // ────────────────────────────────────────────────
+  const normalizePhone = (phone) => {
+    if (!phone) return '';
+    const digits = String(phone).replace(/\D/g, '');
+    if (digits.length === 10) return `91${digits}`;
+    if (digits.length === 11 && digits.startsWith('0')) return `91${digits.slice(1)}`;
+    return digits;
+  };
+
+  const formatDate = (d) => {
+    if (!d) return '—';
+    try {
+      return new Date(d).toLocaleDateString('en-IN', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+      });
+    } catch {
+      return d;
+    }
+  };
+
+  const buildInstallmentMessage = (inst) => {
+    const amount = Number(inst.amount) || 0;
+    const paid = Number(inst.paid) || 0;
+    const due = Math.max(amount - paid, 0);
+    const status = (inst.status || 'pending').toLowerCase();
+
+    const parentName = student.basicInfo?.fatherName || 'Parent';
+    const studentName = student.basicInfo?.name || 'your child';
+    const grade = student.basicInfo?.grade || 'N/A';
+    const section = student.basicInfo?.section || '';
+    const classInfo = section ? `${grade}-${section}` : grade;
+    const installmentNo = inst.number ?? '—';
+
+    let title = '';
+    let body = '';
+
+    switch (status) {
+      //  Fully paid
+      case 'paid':
+      case 'completed': {
+        title = ' *Payment Received*';
+        body =
+          `We have received *₹${paid.toLocaleString()}* for *${studentName}* ` +
+          `(Class ${classInfo}) towards *Installment ${installmentNo}*.`;
+        break;
+      }
+
+      //  Partially paid
+      case 'partial': {
+        title = ' *Partial Payment Received*';
+        body =
+          `We have received *₹${paid.toLocaleString()}* for *${studentName}* ` +
+          `(Class ${classInfo}) towards *Installment ${installmentNo}*.\n` +
+          `Outstanding balance: *₹${due.toLocaleString()}* of ₹${amount.toLocaleString()}.`;
+        break;
+      }
+
+      //  Overdue
+      case 'overdue': {
+        title = ' *Overdue Fee Notice*';
+        body =
+          `The fee for *${studentName}* (Class ${classInfo}) — ` +
+          `*Installment ${installmentNo}* is *overdue*.\n` +
+          `Pending amount: *₹${due.toLocaleString()}* of ₹${amount.toLocaleString()}.\n` +
+          `Kindly clear the dues at the earliest to avoid any inconvenience.`;
+        break;
+      }
+
+      //  Cancelled
+      case 'cancelled': {
+        title = ' *Installment Cancelled*';
+        body =
+          `Please note that *Installment ${installmentNo}* for ` +
+          `*${studentName}* (Class ${classInfo}) of ₹${amount.toLocaleString()} ` +
+          `has been *cancelled*.\n` +
+          `If you believe this is an error, please contact the school office.`;
+        break;
+      }
+
+      //  Refunded
+      case 'refunded': {
+        title = ' *Refund Processed*';
+        const refundAmount = paid > 0 ? paid : amount;
+        body =
+          `A refund of *₹${refundAmount.toLocaleString()}* has been processed for ` +
+          `*${studentName}* (Class ${classInfo}) against *Installment ${installmentNo}*.\n` +
+          `The amount will be credited to your original payment method within 5–7 working days.`;
+        break;
+      }
+
+      // Default — pending
+      default: {
+        title = ' *Fee Payment Reminder*';
+        body =
+          `This is a gentle reminder for *${studentName}* (Class ${classInfo}) — ` +
+          `*Installment ${installmentNo}* of *₹${amount.toLocaleString()}* is pending.`;
+        break;
+      }
+    }
+
+    const lines = [
+      `Dear ${parentName},`,
+      '',
+      title,
+      '',
+      body,
+    ];
+
+    const showDueDate = ['pending', 'partial', 'overdue'].includes(status);
+
+    const showPaidInfo = ['paid', 'completed', 'partial', 'refunded'].includes(status);
+
+    if (showDueDate && inst.dueDate) {
+      lines.push('', ` Due Date: ${formatDate(inst.dueDate)}`);
+    }
+    if (showPaidInfo && inst.paidDate) {
+      lines.push(` Paid Date: ${formatDate(inst.paidDate)}`);
+    }
+    if (showPaidInfo && inst.paymentMode) {
+      lines.push(` Payment Mode: ${inst.paymentMode}`);
+    }
+    if (inst.notes && String(inst.notes).trim()) {
+      lines.push('', ` Note: ${String(inst.notes).trim()}`);
+    }
+
+    lines.push('', 'Thank you!');
+
+    return { lines, title, due, paid, amount };
+  };
+  const sendWhatsApp = async (inst) => {
+    try {
+      const phone = normalizePhone(student.basicInfo?.fatherPhone);
+      if (!phone) {
+        toast.error('No phone number available for this student');
+        return;
+      }
+
+      const base = student.installments?.find(i => i.id === inst.id) || inst;
+
+      const { lines } = buildInstallmentMessage(base);
+      const schoolName = await getSchoolName();
+
+      lines.push('', `— *${schoolName}*`);
+
+      const text = encodeURIComponent(lines.join('\n'));
+      const url = `https://wa.me/${phone}?text=${text}`;
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } catch (err) {
+      console.error('WhatsApp send failed:', err);
+      toast.error('Failed to open WhatsApp');
+    }
+  };
+
+  // ────────────────────────────────────────────────
   // Refresh from backend after successful operations
   // ────────────────────────────────────────────────
   const refreshStudent = async () => {
     try {
       const res = await StudentApi.getStudent(studentId);
       if (res.success && res.student) {
-        // Update parent component (important for list & progress)
         onUpdateStudent(res.student);
-        
-        // Clear all local edits so fields show real database values
         setLocalChanges({});
         setShowCustomStatus({});
         setCustomStatusText({});
@@ -35,22 +229,15 @@ const FeesInstallment = ({ student, onUpdateStudent }) => {
     }
   };
 
-  // Get value to display: prefer local edit → otherwise real database value
   const getValue = (instId, field) => {
-    // If we have unsaved local change → show it
     if (localChanges[instId]?.hasOwnProperty(field)) {
       return localChanges[instId][field];
     }
-
-    // Otherwise show real value from prop (database)
     const inst = student.installments?.find(i => i.id === instId);
     const val = inst?.[field];
-
-    // For numeric fields: show empty string instead of 0 when appropriate
     if (['amount', 'paid'].includes(field)) {
       return (val == null || Number(val) === 0) ? '' : val;
     }
-
     return val ?? '';
   };
 
@@ -66,9 +253,6 @@ const FeesInstallment = ({ student, onUpdateStudent }) => {
     }));
   };
 
-  // ────────────────────────────────────────────────
-  // Save changes for one installment
-  // ────────────────────────────────────────────────
   const saveInstallment = async (instId) => {
     if (savingId) return;
     setSavingId(instId);
@@ -80,12 +264,13 @@ const FeesInstallment = ({ student, onUpdateStudent }) => {
 
       const payload = { ...changes };
       if ('amount' in payload) payload.amount = Number(payload.amount) || 0;
-      if ('paid'   in payload) payload.paid   = Number(payload.paid)   || 0;
+      if ('paid' in payload) payload.paid = Number(payload.paid) || 0;
 
       const result = await StudentApi.updateInstallment(studentId, instId, payload);
 
       if (result.success) {
-        await refreshStudent(); // ← this updates everything
+        await refreshStudent();
+        toast.success('Installment saved');
       } else {
         setErrorMsg(result.message || result.error || 'Failed to save');
       }
@@ -97,9 +282,6 @@ const FeesInstallment = ({ student, onUpdateStudent }) => {
     }
   };
 
-  // ────────────────────────────────────────────────
-  // Add new installment (saves immediately)
-  // ────────────────────────────────────────────────
   const addInstallment = async () => {
     if (savingId) return;
     setSavingId('add');
@@ -132,44 +314,28 @@ const FeesInstallment = ({ student, onUpdateStudent }) => {
     }
   };
 
-  // ────────────────────────────────────────────────
-  // Delete installment
-  // ────────────────────────────────────────────────
   const deleteInstallment = async (instId) => {
-  if (savingId) return;
-  if (!window.confirm('Delete this installment?')) return;
+    if (savingId) return;
+    if (!window.confirm('Delete this installment?')) return;
 
-  setSavingId(instId);
-  setErrorMsg(null);
+    setSavingId(instId);
+    setErrorMsg(null);
 
-  console.log("DELETE called with →", {
-    studentId,
-    installmentId: instId,
-    typeOfId: typeof instId,
-    currentInstallments: student.installments?.map(i => ({id: i.id, type: typeof i.id}))
-  });
-
-  try {
-    const result = await StudentApi.deleteInstallment(studentId, instId);
-    console.log("DELETE response:", result);
-
-    if (result.success) {
-      console.log("Delete success → refreshing");
-      await refreshStudent();
-    } else {
-      setErrorMsg(result.message || result.error || 'Delete failed');
+    try {
+      const result = await StudentApi.deleteInstallment(studentId, instId);
+      if (result.success) {
+        await refreshStudent();
+      } else {
+        setErrorMsg(result.message || result.error || 'Delete failed');
+      }
+    } catch (err) {
+      console.error("Delete error:", err);
+      setErrorMsg(err.message || 'Network/server error during delete');
+    } finally {
+      setSavingId(null);
     }
-  } catch (err) {
-    console.error("Delete error:", err);
-    setErrorMsg(err.message || 'Network/server error during delete');
-  } finally {
-    setSavingId(null);
-  }
-};
+  };
 
-  // ────────────────────────────────────────────────
-  // Status handling
-  // ────────────────────────────────────────────────
   const handleStatusChange = (instId, value) => {
     if (value === 'custom') {
       setShowCustomStatus(prev => ({ ...prev, [instId]: true }));
@@ -185,29 +351,22 @@ const FeesInstallment = ({ student, onUpdateStudent }) => {
     updateLocal(instId, 'status', custom);
     setShowCustomStatus(prev => ({ ...prev, [instId]: false }));
     setCustomStatusText(prev => ({ ...prev, [instId]: '' }));
-    // User must click Save button to persist
   };
 
-  // ────────────────────────────────────────────────
-  // Calculated summary (always from latest prop)
-  // ────────────────────────────────────────────────
-  const totalFees     = student.feeStructure?.total || 0;
-  const totalPaid     = student.totalPaid || 0;
+  const totalFees = student.feeStructure?.total || 0;
+  const totalPaid = student.totalPaid || 0;
   const pendingAmount = student.pendingAmount || 0;
-  const progress      = totalFees > 0 ? Math.round((totalPaid / totalFees) * 100) : 0;
+  const progress = totalFees > 0 ? Math.round((totalPaid / totalFees) * 100) : 0;
 
-  // ────────────────────────────────────────────────
-  // Render
-  // ────────────────────────────────────────────────
   const statusOptions = [
-    { value: 'pending',   label: 'Pending'   },
-    { value: 'partial',   label: 'Partial'   },
-    { value: 'paid',      label: 'Paid'      },
-    { value: 'overdue',   label: 'Overdue'   },
+    { value: 'pending', label: 'Pending' },
+    { value: 'partial', label: 'Partial' },
+    { value: 'paid', label: 'Paid' },
+    { value: 'overdue', label: 'Overdue' },
     { value: 'completed', label: 'Completed' },
     { value: 'cancelled', label: 'Cancelled' },
-    { value: 'refunded',  label: 'Refunded'  },
-    { value: 'custom',    label: 'Custom…'   },
+    { value: 'refunded', label: 'Refunded' },
+    { value: 'custom', label: 'Custom…' },
   ];
 
   return (
@@ -222,7 +381,10 @@ const FeesInstallment = ({ student, onUpdateStudent }) => {
         <div>
           <h3 className="text-xl font-semibold text-gray-800">Fee Installments</h3>
           <p className="text-sm text-gray-600 mt-1">
-            Edit → click <strong>Save</strong> → values & progress update
+            Edit → click <strong>Save</strong> → values & progress update → Send Updates on{' '}
+            <span className="inline-flex items-center gap-1 text-emerald-600 font-bold">
+              WhatsApp
+            </span>
           </p>
         </div>
 
@@ -245,21 +407,19 @@ const FeesInstallment = ({ student, onUpdateStudent }) => {
           return (
             <div
               key={inst.id}
-              className={`border rounded-xl p-5 transition-all ${
-                hasUnsaved
+              className={`border rounded-xl p-5 transition-all ${hasUnsaved
                   ? 'border-amber-400 bg-amber-50/40 shadow-sm'
                   : 'border-gray-200 hover:border-gray-300'
-              }`}
+                }`}
             >
               <div className="flex justify-between items-start mb-5">
                 <div className="flex items-center gap-3">
                   <div
-                    className={`w-4 h-4 rounded-full ${
-                      currentStatus === 'paid' || currentStatus === 'completed' ? 'bg-green-500' :
-                      currentStatus === 'partial' ? 'bg-amber-500' :
-                      currentStatus === 'overdue' ? 'bg-orange-500' :
-                      'bg-red-500'
-                    }`}
+                    className={`w-4 h-4 rounded-full ${currentStatus === 'paid' || currentStatus === 'completed' ? 'bg-green-500' :
+                        currentStatus === 'partial' ? 'bg-amber-500' :
+                          currentStatus === 'overdue' ? 'bg-orange-500' :
+                            'bg-red-500'
+                      }`}
                   />
                   <span className="font-bold text-lg text-gray-900">
                     Installment {inst.number}
@@ -269,15 +429,26 @@ const FeesInstallment = ({ student, onUpdateStudent }) => {
                   </span>
                 </div>
 
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
+                  {/* WhatsApp Button */}
+                  <button
+                    onClick={() => sendWhatsApp(inst)}
+                    disabled={isSaving}
+                    className="px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition flex items-center gap-2 text-sm font-medium disabled:opacity-50"
+                    title="Send update via WhatsApp"
+                    type="button"
+                  >
+                    <MessageCircle size={16} />
+                    <span className="hidden sm:inline">WhatsApp</span>
+                  </button>
+
                   <button
                     onClick={() => saveInstallment(inst.id)}
                     disabled={isSaving || !hasUnsaved}
-                    className={`px-5 py-2 rounded-lg text-white flex items-center gap-2 text-sm font-medium transition ${
-                      hasUnsaved && !isSaving
+                    className={`px-5 py-2 rounded-lg text-white flex items-center gap-2 text-sm font-medium transition ${hasUnsaved && !isSaving
                         ? 'bg-green-600 hover:bg-green-700'
                         : 'bg-green-400 cursor-not-allowed opacity-70'
-                    }`}
+                      }`}
                   >
                     <Save size={16} />
                     {isSaving ? 'Saving…' : 'Save'}
@@ -293,7 +464,6 @@ const FeesInstallment = ({ student, onUpdateStudent }) => {
                 </div>
               </div>
 
-              {/* Status */}
               <div className="mb-6">
                 <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
 
@@ -423,7 +593,6 @@ const FeesInstallment = ({ student, onUpdateStudent }) => {
         })}
       </div>
 
-      {/* Summary – updates automatically when student prop changes */}
       <div className="mt-10 p-6 bg-gradient-to-r from-amber-50 to-amber-100 rounded-xl border border-amber-200">
         <h4 className="font-semibold text-gray-800 mb-4 text-lg">Fee Summary</h4>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 text-center">
