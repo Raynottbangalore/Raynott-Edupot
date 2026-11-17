@@ -40,6 +40,9 @@ const Dashboard = ({ user, onLogout }) => {
   const [refreshMarksCard, setRefreshMarksCard] = useState(0);
   const [subjectRefreshTrigger, setSubjectRefreshTrigger] = useState(0);
 
+  // ⭐ NEW: Delete permission state
+  const [canDeleteStudents, setCanDeleteStudents] = useState(false);
+
   // School Info Modal States
   const [isSchoolInfoModalOpen, setIsSchoolInfoModalOpen] = useState(false);
   const [editingSchoolInfo, setEditingSchoolInfo] = useState({
@@ -52,6 +55,18 @@ const Dashboard = ({ user, onLogout }) => {
   const [isSavingSchoolInfo, setIsSavingSchoolInfo] = useState(false);
 
   const navigate = useNavigate();
+
+  // ⭐ NEW: Load current user's delete permission
+  const loadDeletePermission = useCallback(async () => {
+  try {
+    const result = await StudentApi.getMyDeletePermission();
+    console.log('🔐 [Dashboard] Delete permission response:', result);
+    setCanDeleteStudents(!!result?.canDeleteStudents);
+  } catch (err) {
+    console.error('Failed to load delete permission:', err);
+    setCanDeleteStudents(false);
+  }
+}, []);
 
   // Function to trigger MarksTab refresh (called when subjects change)
   const handleSubjectRefresh = useCallback(() => {
@@ -142,11 +157,39 @@ const Dashboard = ({ user, onLogout }) => {
     }
   }, []);
 
-  // Initial load
-  useEffect(() => {
-    refreshStudents();
-    loadSchoolInfo();
-  }, [refreshStudents, loadSchoolInfo]);
+ // Initial load + re-fetch when tab regains focus + light polling
+useEffect(() => {
+  // Initial
+  refreshStudents();
+  loadSchoolInfo();
+  loadDeletePermission();
+
+  // Re-fetch permission whenever user returns to this tab
+  const handleFocus = () => {
+    console.log('🔐 Window focused, re-checking delete permission...');
+    loadDeletePermission();
+  };
+
+  // Also listen for visibility change (more reliable than focus on some browsers)
+  const handleVisibility = () => {
+    if (!document.hidden) {
+      console.log('🔐 Tab visible again, re-checking delete permission...');
+      loadDeletePermission();
+    }
+  };
+
+  window.addEventListener('focus', handleFocus);
+  document.addEventListener('visibilitychange', handleVisibility);
+
+  // Optional safety net: poll every 60s
+  const interval = setInterval(loadDeletePermission, 60000);
+
+  return () => {
+    window.removeEventListener('focus', handleFocus);
+    document.removeEventListener('visibilitychange', handleVisibility);
+    clearInterval(interval);
+  };
+}, [refreshStudents, loadSchoolInfo, loadDeletePermission]);
 
   // Refresh when tab changes to 'allStudents'
   useEffect(() => {
@@ -230,7 +273,13 @@ const Dashboard = ({ user, onLogout }) => {
     }
   };
 
+  // ⭐ UPDATED: Guard delete with permission check
   const handleDeleteStudent = async (studentId) => {
+    if (!canDeleteStudents) {
+      toast.error(' Student deletion is disabled by your administrator.');
+      return;
+    }
+
     if (!window.confirm('Are you sure you want to delete this student?')) return;
 
     try {
@@ -243,6 +292,13 @@ const Dashboard = ({ user, onLogout }) => {
         }
       } else {
         toast.error('Delete failed: ' + (result.error || 'Unknown error'));
+        // If server reports permission denied, flip the UI flag to locked
+        if (
+          result.error === 'DELETE_DISABLED' ||
+          result.error?.toLowerCase?.().includes('disabled')
+        ) {
+          setCanDeleteStudents(false);
+        }
       }
     } catch (err) {
       console.error('Delete error:', err);
@@ -636,6 +692,7 @@ const Dashboard = ({ user, onLogout }) => {
             onSelectStudent={setSelectedStudent}
             onDeleteStudent={handleDeleteStudent}
             onAddNew={() => setActiveTab('addStudent')}
+            canDeleteStudents={canDeleteStudents}
           />
         ) : activeTab === 'fees' ? (
           <FeesTab
@@ -673,6 +730,7 @@ const Dashboard = ({ user, onLogout }) => {
             onUpdateStudent={handleUpdateStudent}
             onRefresh={refreshStudents}
             isLoading={isLoading}
+            canDeleteStudents={canDeleteStudents}
           />
         )}
       </div>

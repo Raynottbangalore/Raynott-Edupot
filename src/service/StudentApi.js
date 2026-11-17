@@ -581,6 +581,92 @@ static async getAllStudentsWithClassMarks(forceRefresh = false) {
       return { success: false, error: error.message };
     }
   }
+  // ────────────────────────────────────────────────
+// Delete Permission API
+// ────────────────────────────────────────────────
+
+/**
+ * Current user's resolved delete permission (for Dashboard).
+ */
+static async getMyDeletePermission() {
+  try {
+    const data = await this.makeRequest(
+      `${BASE_URL}/students/delete-permission/me?_=${Date.now()}`,
+      { method: 'GET' }
+    );
+    return {
+      success: true,
+      canDeleteStudents: !!data.canDeleteStudents,
+      source: data.source,
+    };
+  } catch (error) {
+    console.error('❌ getMyDeletePermission error:', error);
+    return { success: false, canDeleteStudents: false, error: error.message };
+  }
+}
+
+/**
+ * Admin — set school-level permission.
+ */
+static async setSchoolDeletePermission(schoolId, canDeleteStudents) {
+  try {
+    return await this.makeRequest(
+      `${BASE_URL}/admin/schools/${schoolId}/delete-permission`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ canDeleteStudents }),
+      }
+    );
+  } catch (error) {
+    console.error('❌ setSchoolDeletePermission error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Admin — get school-level permission.
+ */
+static async getSchoolDeletePermission(schoolId) {
+  try {
+    return await this.makeRequest(
+      `${BASE_URL}/admin/schools/${schoolId}/delete-permission?_=${Date.now()}`,
+      { method: 'GET' }
+    );
+  } catch (error) {
+    console.error('❌ getSchoolDeletePermission error:', error);
+    return { success: false, canDeleteStudents: false, error: error.message };
+  }
+}
+
+/**
+ * Admin — set user-level override (null = inherit).
+ */
+static async setUserDeletePermission(uid) {
+  try {
+    return await this.makeRequest(
+      `${BASE_URL}/admin/users/${uid}/delete-permission?_=${Date.now()}`,
+      { method: 'GET' }
+    );
+  } catch (error) {
+    console.error('❌ getUserDeletePermission error:', error);
+    return { success: false, canDeleteStudents: null, error: error.message };
+  }
+}
+
+/**
+ * Admin — get user-level override.
+ */
+static async getUserDeletePermission(uid) {
+  try {
+    return await this.makeRequest(
+      `${BASE_URL}/admin/users/${uid}/delete-permission`,
+      { method: 'GET' }
+    );
+  } catch (error) {
+    console.error('❌ getUserDeletePermission error:', error);
+    return { success: false, canDeleteStudents: null, error: error.message };
+  }
+}
 
   /**
    * Search students

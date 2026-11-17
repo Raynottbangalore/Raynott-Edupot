@@ -6,11 +6,12 @@ import {
   Lock, Unlock, CheckCircle, AlertCircle,
   BarChart3, X, Copy,
   Users, Eye, Plus, Settings, ChevronDown, ChevronUp,
-  User, Calendar, Receipt, IdCardIcon
+  User, Calendar, Receipt, IdCardIcon, Info
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { auth } from '../service/firebase';
 import SchoolApi from '../service/SchoolApi';  
+import StudentApi from '../service/StudentApi';
 import { useNavigate } from 'react-router-dom';
 
 const AVAILABLE_TABS = [
@@ -31,7 +32,6 @@ const AVAILABLE_TABS = [
 
 // Helper function to normalize tab IDs (for backward compatibility)
 const normalizeTabId = (tabId) => {
-  // Map 'assessments' (plural) to 'assessment' (singular)
   if (tabId === 'assessments') return 'assessment';
   return tabId;
 };
@@ -40,7 +40,6 @@ const normalizeTabId = (tabId) => {
 const normalizeTabs = (tabs) => {
   if (!tabs || !Array.isArray(tabs)) return [];
   const normalized = tabs.map(normalizeTabId);
-  // Remove duplicates
   return [...new Set(normalized)];
 };
 
@@ -60,6 +59,9 @@ const AdminDashboard = ({ user, onLogout }) => {
   const [expandedSchools, setExpandedSchools] = useState({});
   const [schoolUsers, setSchoolUsers] = useState({});
   const [tempSelectedTabs, setTempSelectedTabs] = useState([]);
+
+  // ⭐ School-level delete permission only (no per-user overrides)
+  const [deletePermissions, setDeletePermissions] = useState({}); // schoolId -> bool
 
   const navigate = useNavigate();
 
@@ -82,13 +84,25 @@ const AdminDashboard = ({ user, onLogout }) => {
       setSchools(formatted);
       setFilteredSchools(formatted);
       
-      // Load users for each school
       formatted.forEach(school => {
         loadSchoolUsers(school.schoolId);
       });
+
+      loadSchoolDeletePermissions(formatted);
     } else {
       toast.error(result.error || "Couldn't load schools");
     }
+  };
+
+  // Load school-level delete permissions (parallel)
+  const loadSchoolDeletePermissions = async (schoolsList) => {
+    const entries = await Promise.all(
+      schoolsList.map(async (school) => {
+        const res = await StudentApi.getSchoolDeletePermission(school.schoolId);
+        return [school.schoolId, res?.canDeleteStudents ?? false];
+      })
+    );
+    setDeletePermissions(Object.fromEntries(entries));
   };
 
   const handleTabToggle = (tabId) => {
@@ -102,7 +116,6 @@ const AdminDashboard = ({ user, onLogout }) => {
   const loadSchoolUsers = async (schoolId) => {
     const result = await SchoolApi.getSchoolUsers(schoolId);
     if (result.success) {
-      // Normalize tab IDs for each user when loading
       const normalizedUsers = (result.users || []).map(user => ({
         ...user,
         enabledTabs: normalizeTabs(user.enabledTabs || [])
@@ -144,7 +157,6 @@ const AdminDashboard = ({ user, onLogout }) => {
     toast.info('Copied to clipboard!');
   };
 
-  // Create New School (School Admin - Full Access)
   const handleCreateSchool = async (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
@@ -167,7 +179,6 @@ const AdminDashboard = ({ user, onLogout }) => {
 
     if (result.success) {
       toast.success("School created successfully!");
-
       setSelectedCredentials({
         name: newSchool.name,
         email: result.email || newSchool.email,
@@ -183,7 +194,6 @@ const AdminDashboard = ({ user, onLogout }) => {
     }
   };
 
-  // Add Limited User
   const handleCreateSchoolUser = async (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
@@ -221,12 +231,10 @@ const AdminDashboard = ({ user, onLogout }) => {
     }
   };
 
-  // Reset Password - Auto generate
   const handleResetPassword = async (school, isUser = false, userData = null) => {
     const newPassword = generatePassword();
 
     if (isUser && userData) {
-      // Reset user password logic here
       const result = await SchoolApi.resetSchoolUserPassword(userData.uid, newPassword);
       if (result.success) {
         setSelectedCredentials({
@@ -296,7 +304,6 @@ const AdminDashboard = ({ user, onLogout }) => {
     setLoading(false);
     if (result.success) {
       toast.success(`User "${userName}" deleted`);
-      // Reload users for the school
       const schoolId = Object.keys(schoolUsers).find(key => 
         schoolUsers[key].some(u => u.uid === uid)
       );
@@ -307,7 +314,6 @@ const AdminDashboard = ({ user, onLogout }) => {
   };
 
   const handleCustomizeUserTabs = (user, school) => {
-    // Normalize tabs when opening the configuration modal
     const normalizedTabs = normalizeTabs(user.enabledTabs || []);
     setSelectedUserForTabs({ user, school });
     setTempSelectedTabs(normalizedTabs);
@@ -337,7 +343,6 @@ const AdminDashboard = ({ user, onLogout }) => {
   const saveUserTabConfig = async () => {
     if (!selectedUserForTabs) return;
     
-    // Normalize tabs before saving to ensure consistency
     const normalizedTabs = normalizeTabs(tempSelectedTabs);
     
     const result = await SchoolApi.updateUserTabConfig(
@@ -350,12 +355,44 @@ const AdminDashboard = ({ user, onLogout }) => {
       setShowTabConfig(false);
       setSelectedUserForTabs(null);
       setTempSelectedTabs([]);
-      // Reload users to reflect changes
       if (selectedUserForTabs.school) {
         loadSchoolUsers(selectedUserForTabs.school.schoolId);
       }
     } else {
       toast.error(result.error || "Failed to update tab configuration");
+    }
+  };
+
+  // ⭐ School-level toggle only
+  const handleToggleSchoolDelete = async (school) => {
+    const current = !!deletePermissions[school.schoolId];
+
+    setDeletePermissions(prev => ({ ...prev, [school.schoolId]: !current }));
+
+    try {
+      const result = await StudentApi.setSchoolDeletePermission(
+        school.schoolId,
+        !current
+      );
+
+      if (result?.success) {
+        toast.success(
+          !current
+            ? `Student deletion enabled  for ${school.name} — all users can now delete students`
+            : `Student deletion locked  for ${school.name} — all users are now blocked from deleting students`
+        );
+        const verify = await StudentApi.getSchoolDeletePermission(school.schoolId);
+        setDeletePermissions(prev => ({
+          ...prev,
+          [school.schoolId]: verify?.canDeleteStudents ?? !current,
+        }));
+      } else {
+        setDeletePermissions(prev => ({ ...prev, [school.schoolId]: current }));
+        toast.error(result?.error || 'Failed to update school permission');
+      }
+    } catch (err) {
+      setDeletePermissions(prev => ({ ...prev, [school.schoolId]: current }));
+      toast.error(err.message || 'Network error');
     }
   };
 
@@ -504,6 +541,26 @@ const AdminDashboard = ({ user, onLogout }) => {
                             <span className="hidden md:inline">Add User</span>
                           </button>
 
+                          {/* ⭐ School-level delete permission toggle */}
+                          <button
+                            onClick={() => handleToggleSchoolDelete(school)}
+                            className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-colors ${
+                              deletePermissions[school.schoolId]
+                                ? 'bg-green-50 text-green-700 hover:bg-green-100'
+                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                            }`}
+                            title={
+                              deletePermissions[school.schoolId]
+                                ? 'Student deletion enabled — click to lock'
+                                : 'Student deletion locked — click to unlock'
+                            }
+                          >
+                            {deletePermissions[school.schoolId] ? <Unlock size={16} /> : <Lock size={16} />}
+                            <span className="hidden md:inline">
+                              {deletePermissions[school.schoolId] ? 'Deletion Allowed' : 'Deletion Locked'}
+                            </span>
+                          </button>
+
                           {/* View Info */}
                           <button
                             onClick={() => {
@@ -525,7 +582,7 @@ const AdminDashboard = ({ user, onLogout }) => {
                             <span className="hidden md:inline">Info</span>
                           </button>
 
-                          {/* Delete */}
+                          {/* Delete School */}
                           <button
                             onClick={() => handleDeleteSchool(school.schoolId)}
                             className="px-4 py-2 bg-red-50 text-red-700 rounded-lg hover:bg-red-100 flex items-center gap-2 transition-colors"
@@ -537,8 +594,27 @@ const AdminDashboard = ({ user, onLogout }) => {
                         </div>
                       </div>
 
+                      {/* ⭐ NEW: Info note about delete lock affecting users */}
+                      <div className={`mt-3 flex items-start gap-2 p-3 rounded-lg border ${
+                        deletePermissions[school.schoolId]
+                          ? 'bg-green-50 border-green-200'
+                          : 'bg-amber-50 border-amber-200'
+                      }`}>
+                        <Info size={16} className={`mt-0.5 flex-shrink-0 ${
+                          deletePermissions[school.schoolId] ? 'text-green-600' : 'text-amber-600'
+                        }`} />
+                        <p className={`text-sm ${
+                          deletePermissions[school.schoolId] ? 'text-green-800' : 'text-amber-800'
+                        }`}>
+                          <strong>Note:</strong>{' '}
+                          {deletePermissions[school.schoolId]
+                            ? 'Student deletion is currently ALLOWED. All school users (including school admins and limited users) can delete students.'
+                            : 'Student deletion is currently LOCKED. All school users (including school admins and limited users) are blocked from deleting students. Click the toggle above to enable.'}
+                        </p>
+                      </div>
+
                       {/* School Details Grid */}
-                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4">
                         <div className="p-3 bg-gray-50 rounded-lg">
                           <p className="text-sm text-gray-600">Email</p>
                           <div className="flex items-center justify-between mt-1">
@@ -632,41 +708,42 @@ const AdminDashboard = ({ user, onLogout }) => {
                             <div className="space-y-3">
                               {schoolUsers[school.schoolId]
                                 .filter(user => user.role !== 'school_admin')
-                                .map((user) => (
-                                  <div key={user.uid} className="bg-white rounded-lg p-4 border border-gray-200 hover:shadow-sm transition-shadow">
+                                .map((userItem) => (
+                                  <div key={userItem.uid} className="bg-white rounded-lg p-4 border border-gray-200 hover:shadow-sm transition-shadow">
                                     <div className="flex flex-wrap items-center justify-between gap-4">
                                       <div className="flex-1 min-w-0">
                                         <div className="flex items-center gap-2 mb-1">
                                           <User size={16} className="text-blue-500" />
-                                          <p className="font-semibold text-gray-800 text-2xl">{user.name}</p>
+                                          <p className="font-semibold text-gray-800 text-2xl">{userItem.name}</p>
                                           <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
-                                            {user.role === 'school_admin' ? 'School Admin' : (user.fullAccess ? 'Full Access' : 'Limited Access')}
+                                            {userItem.role === 'school_admin' ? 'School Admin' : (userItem.fullAccess ? 'Full Access' : 'Limited Access')}
                                           </span>
-                                          {user.enabledTabs && user.enabledTabs.length > 0 && (
+                                          {userItem.enabledTabs && userItem.enabledTabs.length > 0 && (
                                             <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">
-                                              {user.enabledTabs.length} tabs enabled
+                                              {userItem.enabledTabs.length} tabs enabled
                                             </span>
                                           )}
                                         </div>
-                                        <p className="text-sm text-gray-600 break-all">{user.email}</p>
-                                        {user.createdAt && (
+                                        <p className="text-sm text-gray-600 break-all">{userItem.email}</p>
+                                        {userItem.createdAt && (
                                           <p className="text-xs text-gray-400 mt-1">
-                                            Created: {new Date(user.createdAt).toLocaleDateString()}
+                                            Created: {new Date(userItem.createdAt).toLocaleDateString()}
                                           </p>
                                         )}
                                       </div>
                                       <div className="flex items-center gap-2">
-                                        {/* Customize Tabs Button - Only for regular users */}
+                                        {/* Customize Tabs Button */}
                                         <button
-                                          onClick={() => handleCustomizeUserTabs(user, school)}
+                                          onClick={() => handleCustomizeUserTabs(userItem, school)}
                                           className="px-3 py-1.5 bg-purple-50 text-purple-700 rounded-lg hover:bg-purple-100 flex items-center gap-1 text-sm transition-colors"
                                           title="Customize User Tabs"
                                         >
                                           <Settings size={14} />
                                           <span>Tabs</span>
                                         </button>
+
                                         <button
-                                          onClick={() => handleResetPassword(school, true, user)}
+                                          onClick={() => handleResetPassword(school, true, userItem)}
                                           className="px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 flex items-center gap-1 text-sm transition-colors"
                                           title="Reset User Password"
                                         >
@@ -676,11 +753,11 @@ const AdminDashboard = ({ user, onLogout }) => {
                                         <button
                                           onClick={() => {
                                             setSelectedCredentials({
-                                              name: user.name,
-                                              email: user.email,
-                                              role: user.role === 'school_admin' ? 'School Admin' : (user.fullAccess ? 'Full Access User' : 'Limited Access User'),
+                                              name: userItem.name,
+                                              email: userItem.email,
+                                              role: userItem.role === 'school_admin' ? 'School Admin' : (userItem.fullAccess ? 'Full Access User' : 'Limited Access User'),
                                               schoolId: school.schoolId,
-                                              createdAt: user.createdAt,
+                                              createdAt: userItem.createdAt,
                                             });
                                             setShowCredentials(true);
                                           }}
@@ -691,7 +768,7 @@ const AdminDashboard = ({ user, onLogout }) => {
                                           <span>Info</span>
                                         </button>
                                         <button
-                                          onClick={() => handleDeleteUser(user.uid, user.name)}
+                                          onClick={() => handleDeleteUser(userItem.uid, userItem.name)}
                                           className="px-3 py-1.5 bg-red-50 text-red-700 rounded-lg hover:bg-red-100 flex items-center gap-1 text-sm transition-colors"
                                           title="Delete User"
                                         >
@@ -704,7 +781,15 @@ const AdminDashboard = ({ user, onLogout }) => {
                                 ))}
                             </div>
                           )}
-                          
+
+                          {/* ⭐ NEW: Info note inside users section */}
+                          <div className="mt-4 flex items-start gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                            <Info size={16} className="mt-0.5 flex-shrink-0 text-blue-600" />
+                            <p className="text-sm text-blue-800">
+                              <strong>Note:</strong> The school-level <strong>Deletion Lock</strong> above applies to all users below. 
+                              When locked, none of these users (including full access users) can delete students.
+                            </p>
+                          </div>
                         </div>
                       </div>
                     )}
@@ -837,15 +922,6 @@ const AdminDashboard = ({ user, onLogout }) => {
                           After creating the user, click on the <strong>"Tabs"</strong> button next to the user's name 
                           to customize which dashboard tabs they can access. By default, new users will have no tabs enabled.
                         </p>
-                        <div className="mt-2 flex items-center gap-2 text-xs text-blue-600">
-                          <span className="bg-blue-100 px-2 py-1 rounded">1. Create User</span>
-                          <span>→</span>
-                          <span className="bg-blue-100 px-2 py-1 rounded">2. Find user in list</span>
-                          <span>→</span>
-                          <span className="bg-blue-100 px-2 py-1 rounded">3. Click "Tabs" button</span>
-                          <span>→</span>
-                          <span className="bg-blue-100 px-2 py-1 rounded">4. Select allowed tabs</span>
-                        </div>
                       </div>
                     </div>
                   </div>
@@ -915,20 +991,16 @@ const AdminDashboard = ({ user, onLogout }) => {
                         type="checkbox" 
                         className="mt-1 w-5 h-5 text-amber-600 rounded cursor-pointer"
                         checked={tempSelectedTabs.includes(tab.id)}
-                        onChange={() => {}} // Handled by onClick on label
+                        onChange={() => {}}
                       />
                       <div className="ml-3">
-                        <div className="font-semibold">
-                          {/* <span className="mr-2">{tab.icon}</span> */}
-                          {tab.name}
-                        </div>
+                        <div className="font-semibold">{tab.name}</div>
                         <p className="text-sm text-gray-600">{tab.description}</p>
                       </div>
                     </label>
                   ))}
                 </div>
                 
-                {/* Selection summary */}
                 <div className="mt-4 p-4 bg-gray-50 rounded-lg">
                   <p className="text-sm text-gray-600">
                     <strong className="text-amber-600">{tempSelectedTabs.length}</strong> of {AVAILABLE_TABS.length} tabs selected

@@ -72,12 +72,27 @@ const DynamicDashboard = () => {
   const [isSchoolInfoLoading, setIsSchoolInfoLoading] = useState(true);
   const [studentHallTicketData, setStudentHallTicketData] = useState({});
 
+  // ⭐ NEW: Delete permission state
+  const [canDeleteStudents, setCanDeleteStudents] = useState(false);
+
   // Helper function to normalize tab IDs
   const normalizeTabId = (tabId) => {
     if (tabId === 'assessments') return 'assessment';
     if (tabId === 'studentAttendance') return 'studentAttendance';
     if (tabId === 'teacherAttendance') return 'teacherAttendance';
     return tabId;
+  };
+
+  // ⭐ NEW: Load current user's delete permission
+  const loadDeletePermission = async () => {
+    try {
+      const result = await StudentApi.getMyDeletePermission();
+      console.log('🔐 [DynamicDashboard] Delete permission:', result);
+      setCanDeleteStudents(!!result?.canDeleteStudents);
+    } catch (err) {
+      console.error('Failed to load delete permission:', err);
+      setCanDeleteStudents(false);
+    }
   };
 
   // Fetch user data and tab configuration on mount
@@ -135,7 +150,7 @@ const DynamicDashboard = () => {
         await loadSchoolInfo();
         await refreshStudents();
         await loadHallTicketsForStudents();
-        
+        await loadDeletePermission();   // ⭐ NEW
       } catch (error) {
         console.error('Error fetching user data:', error);
         toast.error('Failed to load dashboard configuration');
@@ -145,6 +160,25 @@ const DynamicDashboard = () => {
     };
     
     fetchUserData();
+  }, []);
+
+  // ⭐ NEW: Re-fetch delete permission on focus / visibility / interval
+  useEffect(() => {
+    const handleFocus = () => {
+      console.log('🔐 Window focused — re-checking delete permission');
+      loadDeletePermission();
+    };
+    const handleVisibility = () => {
+      if (!document.hidden) loadDeletePermission();
+    };
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibility);
+    const interval = setInterval(loadDeletePermission, 60000);
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      clearInterval(interval);
+    };
   }, []);
 
   const loadHallTicketsForStudents = async () => {
@@ -281,7 +315,13 @@ const DynamicDashboard = () => {
     }
   };
   
+  // ⭐ UPDATED: Guard delete with permission check
   const handleDeleteStudent = async (studentId) => {
+    if (!canDeleteStudents) {
+      toast.error(' Student deletion is disabled by your administrator.');
+      return;
+    }
+
     if (!window.confirm('Are you sure you want to delete this student?')) return;
     
     try {
@@ -294,6 +334,10 @@ const DynamicDashboard = () => {
         }
       } else {
         toast.error('Delete failed: ' + (result.error || 'Unknown error'));
+        // If server reports permission denied, flip the UI flag to locked
+        if (result.error?.toLowerCase?.().includes('disabled')) {
+          setCanDeleteStudents(false);
+        }
       }
     } catch (err) {
       console.error('Delete error:', err);
@@ -379,6 +423,7 @@ const DynamicDashboard = () => {
             onDeleteStudent={handleDeleteStudent}
             onAddNew={() => setActiveTab('addStudent')}
             onUpdateStudent={handleUpdateStudent}
+            canDeleteStudents={canDeleteStudents}   // ⭐ ADD
           />
         );
       case 'marksCard':
@@ -408,6 +453,7 @@ const DynamicDashboard = () => {
             onUpdateStudent={handleUpdateStudent}
             onRefresh={handleRefresh}
             isLoading={isLoading || refreshing}
+            canDeleteStudents={canDeleteStudents}   // ⭐ ADD
           />
         );
       case 'assessment':
@@ -450,7 +496,7 @@ const DynamicDashboard = () => {
     return (
       <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 flex items-center justify-center">
         <div className="text-center bg-white p-8 rounded-2xl shadow-lg">
-          <div className="text-6xl mb-4">🔒</div>
+          {/* <div className="text-6xl mb-4">🔒</div> */}
           <h2 className="text-2xl font-bold text-gray-700 mb-2">No Tabs Available</h2>
           <p className="text-gray-500">Please contact administrator to enable dashboard access.</p>
           <button

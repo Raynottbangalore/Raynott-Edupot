@@ -6,12 +6,12 @@ import {
   TrendingUp, TrendingDown, Award, Clock, CheckCircle, XCircle,
   BarChart3, PieChart, DollarSign, CreditCard, AlertTriangle,
   Grid3x3, School, Layers, FolderTree,
-  Eye, Trash2, ArrowLeft
+  Eye, Trash2, ArrowLeft, Lock
 } from 'lucide-react';
 import StudentCard from './StudentCard';
 import ClassSectionView from './ClassSectionView';
 
-const AllStudents = ({ students, onViewDetails, onDelete, onUpdateStudent, onRefresh, isLoading }) => {
+const AllStudents = ({ students, onViewDetails, onDelete, onUpdateStudent, onRefresh, isLoading, canDeleteStudents = false }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedGrade, setSelectedGrade] = useState('');
   const [selectedSection, setSelectedSection] = useState('');
@@ -352,6 +352,19 @@ const AllStudents = ({ students, onViewDetails, onDelete, onUpdateStudent, onRef
           </div>
         </div>
 
+        {/* ⭐ NEW: Locked banner in students view */}
+        {!canDeleteStudents && (
+          <div className="flex items-center gap-3 p-4 bg-amber-50 border border-amber-200 rounded-xl">
+            <Lock size={20} className="text-amber-600" />
+            <div>
+              <p className="font-semibold text-amber-800">Student deletion is disabled</p>
+              <p className="text-sm text-amber-700">
+                Your administrator has locked student deletion. Contact  admin to enable it.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Search and Filters for this class */}
         <div className="bg-white rounded-xl border border-gray-200 p-5">
           <div className="relative">
@@ -394,6 +407,7 @@ const AllStudents = ({ students, onViewDetails, onDelete, onUpdateStudent, onRef
                   onViewDetails={() => onViewDetails(student)}
                   onDelete={() => onDelete(student.studentId || student.id)}
                   onUpdateStudent={onUpdateStudent}
+                  canDelete={canDeleteStudents}
                 />
               ))}
           </div>
@@ -504,6 +518,19 @@ const AllStudents = ({ students, onViewDetails, onDelete, onUpdateStudent, onRef
 
       {/* Stats Cards */}
       {renderStatsCards()}
+
+      {/* ⭐ NEW: Locked banner in classes view */}
+      {!canDeleteStudents && (
+        <div className="flex items-center gap-3 p-4 bg-amber-50 border border-amber-200 rounded-xl">
+          <Lock size={20} className="text-amber-600" />
+          <div>
+            <p className="font-semibold text-amber-800">Student deletion is disabled</p>
+            <p className="text-sm text-amber-700">
+              Your administrator has locked student deletion. Contact admin to enable it.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Classes and Sections Grid */}
       <div>

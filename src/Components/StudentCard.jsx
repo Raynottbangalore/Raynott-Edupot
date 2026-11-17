@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Eye, Trash2, Download, User, Phone, Droplet,
-  Hash, X, Edit2, Save, Loader2, AlertCircle
+  Hash, X, Edit2, Save, Loader2, AlertCircle, Lock
 } from 'lucide-react';
 import FeesInstallment from './FeesInstallment';
 import Marks from './Marks';
 import StudentInfo from './StudentInfo';
 import StudentApi from '../service/StudentApi';
 
-const StudentCard = ({ student, onDelete, onUpdateStudent }) => {
+const StudentCard = ({ student, onDelete, onUpdateStudent, canDelete = false }) => {
   const [showDetails, setShowDetails] = useState(false);
   const [activeTab, setActiveTab] = useState('info');
   const [isEditing, setIsEditing] = useState(false);
@@ -220,6 +220,10 @@ const StudentCard = ({ student, onDelete, onUpdateStudent }) => {
   };
 
   const handleDelete = () => {
+    // ⭐ NEW: Guard delete at the source
+    if (!canDelete) {
+      return;
+    }
     if (window.confirm(`Are you sure you want to delete ${student.basicInfo?.name || 'this student'}?`)) {
       onDelete?.(student.studentId);
     }
@@ -295,13 +299,24 @@ const StudentCard = ({ student, onDelete, onUpdateStudent }) => {
               <Eye size={18} />
             </button>
 
-            <button
-              onClick={handleDelete}
-              className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-              title="Delete student"
-            >
-              <Trash2 size={18} />
-            </button>
+            {/* ⭐ LOCK-AWARE DELETE BUTTON */}
+            {canDelete ? (
+              <button
+                onClick={handleDelete}
+                className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                title="Delete student"
+              >
+                <Trash2 size={18} />
+              </button>
+            ) : (
+              <button
+                disabled
+                className="p-2 text-gray-300 cursor-not-allowed rounded-lg"
+                title="Deletion disabled by administrator"
+              >
+                <Lock size={18} />
+              </button>
+            )}
           </div>
         </div>
       </div>
